@@ -7,7 +7,14 @@
 #include <stdio.h>
 #include <termios.h>
 
+#include "src/modes.h"
+
 #define szstr(str) str, sizeof(str)
+#define CLEAR_LINE "\x1b[2K"
+
+typedef struct {
+  char key;
+} Key;
 
 typedef struct {
   char *str;
@@ -71,10 +78,17 @@ int main() {
   ioctl(1, TIOCGWINSZ, &ws);
 
   // Program loop
+  int mode = NORMAL_MODE;
   while(1) {
     char input;
     read(1, &input, 1);
-    if(input == 'c') printf("Hello, Banji!\n");
+    printf("Key: %d\n", input);
+
+    switch(mode) {
+      case NORMAL_MODE: {
+        
+      } break;
+    }
   }
 
   return 0;
