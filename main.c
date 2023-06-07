@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <termios.h>
 
 #define szstr(str) str, sizeof(str)
 
@@ -27,10 +28,13 @@ typedef struct Selection {
   struct Selection *prev;
 } Selection;
 
+struct termios initial;
+
 void cleanup(void) {
   write(1, szstr("\x1b[?1049h"));
   write(1, szstr("\x1b[2J"));
   write(1, szstr("\x1b[?1049l"));
+  tcsetattr(1, TCSANOW, &initial);
 }
 void die() { // Signal won't accept functions where void is specified
   exit(1);
@@ -52,14 +56,21 @@ int main() {
   write(1, szstr("\x1b[2J")); // Clear the screen and disable scrollback.
   move_cursor(sels_head, 0, 0);
 
+  // Disable line editing
+  struct termios t;
+  tcgetattr(1, &t);
+  initial = t;
+  t.c_lflag &= (~ECHO & ~ICANON);
+  tcsetattr(1, TCSANOW, &t);
+
   atexit(cleanup);
   signal(SIGTERM, die);
   signal(SIGINT, die);
 
-  // Get terminal size
   struct winsize ws;
   ioctl(1, TIOCGWINSZ, &ws);
 
+  // Program loop
   write(1, szstr("Hello, world!\n"));
   sleep(1);
 
