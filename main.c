@@ -17,6 +17,15 @@ typedef struct {
   size_t num_lines;
 } Buffer;
 
+typedef struct Selection {
+  size_t anchor_line;
+  size_t anchor_column;
+  size_t cursor_line;
+  size_t cursor_column;
+  struct Selection *next;
+  struct Selection *prev;
+} Selection;
+
 void cleanup(void) {
   write(1, szstr("\x1b[?1049h"));
   write(1, szstr("\x1b[2J"));
@@ -27,14 +36,18 @@ void die() { // Signal won't accept functions where void is specified
 }
 
 int main() {
-  // Enter into the alternate buffer, and clear scroll-back
-  write(1, szstr("\x1b[?1049h"));
-  write(1, szstr("\x1b[2J"));
+  Selection *first_sel = calloc(1, sizeof(Selection));
+
+  // Prepare TUI
+  write(1, szstr("\x1b[?1049h")); // Switch to alternate buffer
+  write(1, szstr("\x1b[2J")); // Clear the screen and disable scrollback.
+  write(1, szstr("\x1b[0;0H")); // Move cursor to 0, 0
 
   atexit(cleanup);
   signal(SIGTERM, die);
   signal(SIGINT, die);
 
+  // Get terminal size
   struct winsize ws;
   ioctl(1, TIOCGWINSZ, &ws);
 
