@@ -56,7 +56,7 @@ int main() {
   write(1, szstr("\x1b[2J")); // Clear the screen and disable scrollback.
   move_cursor(sels_head, 0, 0);
 
-  // Disable line editing
+  // Disable line editing, and make input visible before enter is pressed
   struct termios t;
   tcgetattr(1, &t);
   initial = t;
@@ -71,8 +71,11 @@ int main() {
   ioctl(1, TIOCGWINSZ, &ws);
 
   // Program loop
-  write(1, szstr("Hello, world!\n"));
-  sleep(1);
+  while(1) {
+    char input;
+    read(1, &input, 1);
+    if(input == 'c') printf("Hello, Banji!\n");
+  }
 
   return 0;
 }
