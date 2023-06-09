@@ -3,20 +3,17 @@
 
 #include <stdlib.h>
 
-typedef struct {
+typedef struct Line {
   char *str;
   size_t len;
+  struct Line *prev;
+  struct Line *next;
 } Line;
 
-typedef struct {
-  Line *content;
-  size_t num_lines;
-} Buffer;
-
 typedef struct Selection {
-  size_t anchor_line;
+  Line *anchor_line;
   size_t anchor_column;
-  size_t cursor_line;
+  Line *cursor_line;
   size_t cursor_column;
   struct Selection *next;
   struct Selection *prev;

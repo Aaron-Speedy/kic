@@ -30,21 +30,12 @@ void die() { // Signal won't accept functions where void is specified
   exit(EXIT_FAILURE);
 }
 
-void move_cursor(Selection *sel, size_t cursor_line_new, size_t cursor_column_new) {
-  sel->cursor_line = cursor_line_new;
-  sel->cursor_column = cursor_column_new;
-
-  printf("\x1b[%zu;%zuH", cursor_line_new, cursor_column_new);
-  fflush(stdout);
-}
-
 int main() {
   Selection *sels_head = calloc(1, sizeof(Selection));
 
   // Prepare TUI
   write(1, szstr("\x1b[?1049h")); // Switch to alternate buffer
   write(1, szstr("\x1b[2J")); // Clear the screen and disable scrollback.
-  move_cursor(sels_head, 0, 0);
 
   // Disable line buffering and echo
   struct termios t;

@@ -6,6 +6,6 @@
 
 #include "structs.h"
 
-int insert(Buffer *buff, Selection *sel, ...); // Args: char_to_insert
+int insert(Line *buff, Selection *sel, ...); // Args: char_to_insert
 
 #endif
