@@ -1,3 +1,8 @@
+#ifndef STRUCTS_H
+#define STRUCTS_H
+
+#include <stdlib.h>
+
 typedef struct {
   char *str;
   size_t len;
@@ -16,3 +21,5 @@ typedef struct Selection {
   struct Selection *next;
   struct Selection *prev;
 } Selection;
+
+#endif
