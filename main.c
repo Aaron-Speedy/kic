@@ -9,6 +9,7 @@
 
 #include "src/modes.h"
 #include "src/structs.h"
+#include "src/operations.h"
 
 #define szstr(str) str, sizeof(str)
 #define CLEAR_LINE "\x1b[2K"
