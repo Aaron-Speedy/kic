@@ -8,6 +8,7 @@
 #include <termios.h>
 
 #include "src/modes.h"
+#include "src/structs.h"
 
 #define szstr(str) str, sizeof(str)
 #define CLEAR_LINE "\x1b[2K"
@@ -15,25 +16,6 @@
 typedef struct {
   char key;
 } Key;
-
-typedef struct {
-  char *str;
-  size_t len;
-} Line;
-
-typedef struct {
-  Line *content;
-  size_t num_lines;
-} Buffer;
-
-typedef struct Selection {
-  size_t anchor_line;
-  size_t anchor_column;
-  size_t cursor_line;
-  size_t cursor_column;
-  struct Selection *next;
-  struct Selection *prev;
-} Selection;
 
 struct termios initial;
 
@@ -44,7 +26,7 @@ void cleanup(void) {
   tcsetattr(1, TCSANOW, &initial);
 }
 void die() { // Signal won't accept functions where void is specified
-  exit(1);
+  exit(EXIT_FAILURE);
 }
 
 void move_cursor(Selection *sel, size_t cursor_line_new, size_t cursor_column_new) {
@@ -63,12 +45,12 @@ int main() {
   write(1, szstr("\x1b[2J")); // Clear the screen and disable scrollback.
   move_cursor(sels_head, 0, 0);
 
-  // Disable line editing, and make input visible before enter is pressed
+  // Disable line buffering and echo
   struct termios t;
-  tcgetattr(1, &t);
+  if(tcgetattr(1, &t)) {perror("tcgetattr"); exit(EXIT_FAILURE);}
   initial = t;
   t.c_lflag &= (~ECHO & ~ICANON);
-  tcsetattr(1, TCSANOW, &t);
+  if(tcsetattr(1, TCSANOW, &t)) {perror("tcsetattr"); exit(EXIT_FAILURE);};
 
   atexit(cleanup);
   signal(SIGTERM, die);
@@ -80,13 +62,11 @@ int main() {
   // Program loop
   int mode = NORMAL_MODE;
   while(1) {
-    char input;
-    read(1, &input, 1);
-    printf("Key: %d\n", input);
+    Key input;
+    read(1, &input.key, 1);
 
     switch(mode) {
       case NORMAL_MODE: {
-        
       } break;
     }
   }
