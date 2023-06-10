@@ -6,6 +6,7 @@
 typedef struct Line {
   char *str;
   size_t len;
+  size_t alloc_len;
   struct Line *prev;
   struct Line *next;
 } Line;
