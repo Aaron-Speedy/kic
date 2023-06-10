@@ -13,7 +13,6 @@ typedef struct Line {
 typedef struct Selection {
   Line *anchor_line;
   size_t anchor_column;
-  Line *cursor_line;
   size_t cursor_column;
   struct Selection *next;
   struct Selection *prev;

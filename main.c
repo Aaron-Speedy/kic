@@ -36,6 +36,7 @@ int main() {
   // Prepare TUI
   write(1, szstr("\x1b[?1049h")); // Switch to alternate buffer
   write(1, szstr("\x1b[2J")); // Clear the screen and disable scrollback.
+  printf("\x1b[0;0H");
 
   // Disable line buffering and echo
   struct termios t;
