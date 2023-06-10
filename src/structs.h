@@ -3,6 +3,9 @@
 
 #include <stdlib.h>
 
+/* The buffer is stored as a linked list instead of a gap buffer or something because 
+this editor uses multiple selections, and I am just prototyping right now. I might change
+to a different structure later though.*/ 
 typedef struct Line {
   char *str;
   size_t len;
