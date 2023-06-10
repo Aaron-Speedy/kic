@@ -1,2 +1,2 @@
 # banji-editor
-A suckless-inspired modal editor based on multiple-selections.
+A composable, suckless-inspired, modal editor based on multiple-selections.
