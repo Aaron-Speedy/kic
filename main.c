@@ -55,21 +55,28 @@ int main() {
   ioctl(1, TIOCGWINSZ, &ws);
 
   // Program loop
-  int mode = NORMAL_MODE;
+  int mode = INSERT_MODE;
   while(1) {
     Key input;
     read(1, &input.key, 1);
 
-    insert(sels_head, &input);
+    switch(mode) {
+      case NORMAL_MODE: {
+      } break;
+      case INSERT_MODE: {
+        switch(input.key) {
+          case '\x08':
+            delete(sels_head);
+            break;
+          default:
+            insert(sels_head, input.key);
+        }
+      } break;
+    }
+
     clear_line();
     write(1, szstr("\x1b[0;0H"));
     write(1, sels_head->anchor_line->str, sels_head->anchor_line->len);
-    
-
-    // switch(mode) {
-      // case NORMAL_MODE: {
-      // } break;
-    // }
   }
 
   return 0;
