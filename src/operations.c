@@ -35,8 +35,3 @@ int insert(Selection *sel, ...) { // Args: char char_to_insert
   
   return 0;
 }
-int delete(Selection *sel, ...) { // Args: N/A
-  delete_util(sel->anchor_line, &sel->anchor_column);
-
-  return 0;
-}

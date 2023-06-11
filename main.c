@@ -65,9 +65,6 @@ int main() {
       } break;
       case INSERT_MODE: {
         switch(input.key) {
-          case '\x08':
-            delete(sels_head);
-            break;
           default:
             insert(sels_head, input.key);
         }
