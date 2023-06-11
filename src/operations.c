@@ -6,7 +6,7 @@
 
 #define ARGS va_list args; va_start(args, sel);
 
-int insert_line(Line *line, size_t column, char char_to_insert) {
+int insert_g(Line *line, size_t column, char char_to_insert) {
   line->len++;
 
   if(line->alloc_len >= line->len) {
@@ -30,7 +30,7 @@ int insert(Selection *sel, ...) { // Args: char char_to_insert
   ARGS;
   char char_to_insert = va_arg(args, int);
 
-  insert_line(sel->anchor_line, sel->anchor_column, char_to_insert);
+  insert_g(sel->anchor_line, sel->anchor_column, char_to_insert);
   sel->anchor_column++;
   
   return 0;
