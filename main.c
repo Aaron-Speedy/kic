@@ -59,6 +59,7 @@ int main() {
   while(1) {
     Key input;
     read(1, &input.key, 1);
+    write(1, szstr("\x1b[0;0H"));
 
     insert(sels_head, input);
     clear_line();
