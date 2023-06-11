@@ -12,7 +12,7 @@
 #include "src/operations.h"
 
 #define szstr(str) str, sizeof(str)
-#define CLEAR_LINE "\x1b[2K"
+#define clear_line() write(1, szstr("\x1b[2K"));
 
 typedef struct {
   char key;
@@ -32,6 +32,8 @@ void die() { // Signal won't accept functions where void is specified
 
 int main() {
   Selection *sels_head = calloc(1, sizeof(Selection));
+  Line *buffer = calloc(1, sizeof(Line));
+  sels_head->anchor_line = sels_head->cursor_line = buffer;
 
   // Prepare TUI
   write(1, szstr("\x1b[?1049h")); // Switch to alternate buffer
@@ -58,10 +60,16 @@ int main() {
     Key input;
     read(1, &input.key, 1);
 
-    switch(mode) {
-      case NORMAL_MODE: {
-      } break;
-    }
+    insert(sels_head, input);
+    clear_line();
+    write(1, szstr("\x1b[0;0H"));
+    write(1, sels_head->anchor_line->str, sels_head->anchor_line->len);
+    
+
+    // switch(mode) {
+      // case NORMAL_MODE: {
+      // } break;
+    // }
   }
 
   return 0;

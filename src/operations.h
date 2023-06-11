@@ -6,6 +6,8 @@
 
 #include "structs.h"
 
+int insert_line(Line *line, size_t column, char char_to_insert);
+
 int insert(Selection *sel, ...); // Args: char_to_insert
 
 #endif
