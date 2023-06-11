@@ -6,22 +6,23 @@
 
 #define ARGS va_list args; va_start(args, sel);
 
-int insert_g(Line *line, size_t column, char char_to_insert) {
+int insert_util(Line *line, size_t *column, char char_to_insert) {
   line->len++;
 
   if(line->alloc_len >= line->len) {
-    memmove(line->str + column, line->str + column + 1, line->len - column);
+    memmove(line->str + *column, line->str + *column + 1, line->len - *column);
   } else {
     line->alloc_len += LINE_RESIZE_AMOUNT;
 
     char *new_str = malloc(line->alloc_len);
-    memcpy(new_str, line->str, column);
-    memcpy(new_str + column, line->str + column + 1, line->len - column - 1);
+    memcpy(new_str, line->str, *column);
+    memcpy(new_str + *column, line->str + *column + 1, line->len - *column - 1);
     free(line->str);
     line->str = new_str;
   }
 
-  line->str[column] = char_to_insert;
+  line->str[*column] = char_to_insert;
+  (*column)++;
 
   return 0;
 }
@@ -30,8 +31,7 @@ int insert(Selection *sel, ...) { // Args: char char_to_insert
   ARGS;
   char char_to_insert = va_arg(args, int);
 
-  insert_g(sel->anchor_line, sel->anchor_column, char_to_insert);
-  sel->anchor_column++;
+  insert_util(sel->anchor_line, sel->anchor_column, char_to_insert);
   
   return 0;
 }

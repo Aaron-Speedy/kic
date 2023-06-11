@@ -60,7 +60,7 @@ int main() {
     Key input;
     read(1, &input.key, 1);
 
-    insert(sels_head, input);
+    insert(sels_head, &input);
     clear_line();
     write(1, szstr("\x1b[0;0H"));
     write(1, sels_head->anchor_line->str, sels_head->anchor_line->len);
