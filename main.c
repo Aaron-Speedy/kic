@@ -65,6 +65,9 @@ int main() {
       } break;
       case INSERT_MODE: {
         switch(input.key) {
+          case 127:
+            backspace(sels_head);
+            break;
           default:
             insert(sels_head, input.key);
         }

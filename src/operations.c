@@ -26,6 +26,15 @@ int insert_util(Line *line, size_t *column, char char_to_insert) {
 
   return 0;
 }
+int delete_util(Line *line, size_t *column) {
+  if(line->len > 0) {
+    line->len--;
+    memmove(line->str + *column, line->str + *column + 1, line->len - *column + 1);
+    (*column)--;
+  }
+
+  return 0;
+}
 
 int insert(Selection *sel, ...) { // Args: char char_to_insert
   get_args();
@@ -33,5 +42,10 @@ int insert(Selection *sel, ...) { // Args: char char_to_insert
 
   insert_util(sel->anchor_line, &sel->anchor_column, char_to_insert);
   
+  return 0;
+}
+int backspace(Selection *sel, ...) { // Args: N/A  
+  delete_util(sel->anchor_line, &sel->anchor_column);
+
   return 0;
 }

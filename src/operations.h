@@ -6,8 +6,14 @@
 
 #include "structs.h"
 
+enum Fail_Rets {
+  NO_OP = 1,
+};
+
 int insert_util(Line *line, size_t *column, char char_to_insert);
+int delete_util(Line *line, size_t *column);
 
 int insert(Selection *sel, ...); // Args: char_to_insert
+int backspace(Selection *sel, ...); // Args: N/A
 
 #endif
