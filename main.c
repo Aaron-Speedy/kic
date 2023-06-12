@@ -64,8 +64,10 @@ int main() {
       case NORMAL_MODE: {
         switch(input.key) {
           case 'i':
-            mode = NORMAL_MODE;
+            mode = INSERT_MODE;
             break;
+          default:
+            
         }
       } break;
       case INSERT_MODE: {
