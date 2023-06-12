@@ -55,18 +55,26 @@ int main() {
   ioctl(1, TIOCGWINSZ, &ws);
 
   // Program loop
-  int mode = INSERT_MODE;
+  int mode = NORMAL_MODE;
   while(1) {
     Key input;
     read(1, &input.key, 1);
 
     switch(mode) {
       case NORMAL_MODE: {
+        switch(input.key) {
+          case 'i':
+            mode = NORMAL_MODE;
+            break;
+        }
       } break;
       case INSERT_MODE: {
         switch(input.key) {
           case 127:
             backspace(sels_head);
+            break;
+          case '\x1b':
+            mode = NORMAL_MODE;
             break;
           default:
             insert(sels_head, input.key);
