@@ -66,8 +66,12 @@ int main() {
           case 'i':
             mode = INSERT_MODE;
             break;
-          default:
-            
+          case 'h':
+            move_left(sels_head);
+            break;
+          case 'l':
+            move_right(sels_head);
+            break;
         }
       } break;
       case INSERT_MODE: {
@@ -87,6 +91,8 @@ int main() {
     clear_line();
     write(1, szstr("\x1b[0;0H"));
     write(1, sels_head->anchor_line->str, sels_head->anchor_line->len);
+    printf("\x1b[0;%zuH", sels_head->cursor_column + 1);
+    fflush(stdout);
   }
 
   return 0;
