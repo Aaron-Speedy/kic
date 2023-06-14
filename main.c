@@ -32,8 +32,12 @@ void die() { // Signal won't accept functions where void is specified
 
 int main() {
   Selection *sels_head = calloc(1, sizeof(Selection));
-  Line *buffer = calloc(1, sizeof(Line));
-  sels_head->anchor_line = sels_head->cursor_line = buffer;
+  Buffer buffer = {
+    .lines = calloc(1, sizeof(Line)),
+    .len = 1,
+    .alloc_len = 1,
+  };
+  buffer.lines[0].str = malloc(1);
 
   // Prepare TUI
   write(1, szstr("\x1b[?1049h")); // Switch to alternate buffer
@@ -67,30 +71,30 @@ int main() {
             mode = INSERT_MODE;
             break;
           case 'h':
-            move_left(sels_head);
+            move_left(&buffer, sels_head);
             break;
           case 'l':
-            move_right(sels_head);
+            move_right(&buffer, sels_head);
             break;
         }
       } break;
       case INSERT_MODE: {
         switch(input.key) {
           case 127:
-            backspace(sels_head);
+            backspace(&buffer, sels_head);
             break;
           case '\x1b':
             mode = NORMAL_MODE;
             break;
           default:
-            insert(sels_head, input.key);
+            insert(&buffer, sels_head, input.key);
         }
       } break;
     }
 
     clear_line();
     write(1, szstr("\x1b[0;0H"));
-    write(1, sels_head->anchor_line->str, sels_head->anchor_line->len);
+    write(1, buffer.lines[0].str, buffer.lines[0].len);
     printf("\x1b[0;%zuH", sels_head->cursor_column + 1);
     fflush(stdout);
   }

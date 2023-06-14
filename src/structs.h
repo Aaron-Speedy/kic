@@ -3,21 +3,22 @@
 
 #include <stdlib.h>
 
-/* The buffer is stored as a linked list instead of a gap buffer or something because 
-this editor uses multiple selections, and I am just prototyping right now. I might change
-to a different structure later though.*/ 
-typedef struct Line {
+typedef struct {
   char *str;
   size_t len;
   size_t alloc_len;
-  struct Line *prev;
-  struct Line *next;
 } Line;
 
+typedef struct {
+  Line *lines;
+  size_t len;
+  size_t alloc_len;
+} Buffer;
+
 typedef struct Selection {
-  Line *anchor_line;
-  Line *cursor_line;
+  size_t anchor_line;
   size_t anchor_column;
+  size_t cursor_line;
   size_t cursor_column;
   struct Selection *next;
   struct Selection *prev;

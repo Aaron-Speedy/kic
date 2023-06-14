@@ -10,29 +10,29 @@ enum FailRets {
 
 #define get_args() va_list args; va_start(args, sel);
 
-int insert_util(Line *line, size_t column, char char_to_insert) {
-  line->len++;
+int insert_util(Buffer *buffer, size_t line, size_t column, char char_to_insert) {
+  buffer->lines[line].len++;
 
-  if(line->alloc_len >= line->len) {
-    memmove(line->str + column + 1, line->str + column, line->len - column - 1);
+  if(buffer->lines[line].alloc_len >= buffer->lines[line].len) {
+    memmove(buffer->lines[line].str + column + 1, buffer->lines[line].str + column, buffer->lines[line].len - column - 1);
   } else {
-    line->alloc_len += LINE_RESIZE_AMOUNT;
+    buffer->lines[line].alloc_len += LINE_RESIZE_AMOUNT;
 
-    char *new_str = malloc(line->alloc_len);
-    memcpy(new_str, line->str, column);
-    memcpy(new_str + column + 1, line->str + column, line->len - column - 1);
-    free(line->str);
-    line->str = new_str;
+    char *new_str = malloc(buffer->lines[line].alloc_len);
+    memcpy(new_str, buffer->lines[line].str, column);
+    memcpy(new_str + column + 1, buffer->lines[line].str + column, buffer->lines[line].len - column - 1);
+    free(buffer->lines[line].str);
+    buffer->lines[line].str = new_str;
   }
 
-  line->str[column] = char_to_insert;
+  buffer->lines[line].str[column] = char_to_insert;
 
   return 0;
 }
-int delete_util(Line *line, size_t column) {
-  if(line->len > 0 && line->len > column) {
-    line->len--;
-    memmove(line->str + column, line->str + column + 1, line->len - column + 1);
+int delete_util(Buffer *buffer, size_t line, size_t column) {
+  if(buffer->lines[line].len > 0 && buffer->lines[line].len > column) {
+    buffer->lines[line].len--;
+    memmove(buffer->lines[line].str + column, buffer->lines[line].str + column + 1, buffer->lines[line].len - column + 1);
 
     return 0;
   }
@@ -40,33 +40,36 @@ int delete_util(Line *line, size_t column) {
   return NO_OP;
 }
 
-int insert(Selection *sel, ...) { // Args: char char_to_insert
+int insert(Buffer *buffer, Selection *sel, ...) { // Args: char char_to_insert
   get_args();
   char char_to_insert = va_arg(args, int);
 
-  insert_util(sel->anchor_line, sel->anchor_column, char_to_insert);
+  insert_util(buffer, sel->anchor_line, sel->anchor_column, char_to_insert);
   sel->anchor_column++;
   sel->cursor_column++;
   
   return 0;
 }
-int backspace(Selection *sel, ...) { // Args: N/A  
+int backspace(Buffer *buffer, Selection *sel, ...) { // Args: N/A  
   sel->anchor_column--;
   sel->cursor_column--;
-  if(delete_util(sel->anchor_line, sel->anchor_column)) {sel->anchor_column++; sel->cursor_column++;}
+  if(delete_util(buffer, sel->anchor_line, sel->anchor_column)) {
+    sel->anchor_column++;
+    sel->cursor_column++;
+  }
 
   return 0;
 }
-int move_left(Selection *sel, ...) { // Args: N/A
-  if(sel->cursor_column) sel->cursor_column--;
-
+int move_right(Buffer *buffer, Selection *sel, ...) { // Args: N/A
+  if(sel->cursor_column++ == buffer[sel->cursor_line].len) sel->cursor_column--;
   sel->anchor_column = sel->cursor_column;
   sel->anchor_line = sel->cursor_line;
 
   return 0;
 }
-int move_right(Selection *sel, ...) { // Args: N/A
-  if(sel->cursor_column++ == sel->cursor_line->len) sel->cursor_column--;
+int move_left(Buffer *buffer, Selection *sel, ...) { // Args: N/A
+  if(sel->cursor_column) sel->cursor_column--;
+
   sel->anchor_column = sel->cursor_column;
   sel->anchor_line = sel->cursor_line;
 

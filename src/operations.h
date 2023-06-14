@@ -6,12 +6,12 @@
 
 #include "structs.h"
 
-int insert_util(Line *line, size_t column, char char_to_insert);
-int delete_util(Line *line, size_t column);
+int insert_util(Buffer *buffer, size_t line, size_t column, char char_to_insert);
+int delete_util(Buffer *buffer, size_t line, size_t column);
 
-int insert(Selection *sel, ...); // Args: char_to_insert
-int backspace(Selection *sel, ...); // Args: N/A
-int move_left(Selection *sel, ...); // Args: N/A
-int move_right(Selection *sel, ...); // Args: N/A
-
+int insert(Buffer *buffer, Selection *sel, ...); // Args: char_to_insert
+int backspace(Buffer *buffer, Selection *sel, ...); // Args: N/A
+int move_right(Buffer *buffer, Selection *sel, ...); // Args: N/A
+int move_left(Buffer *buffer, Selection *sel, ...); // Args: N/A
+int move_up(Buffer *buffer, Selection *sel, ...); // Args: N/A
 #endif
