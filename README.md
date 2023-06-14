@@ -1,2 +1,2 @@
 # banji-editor
-A composable, suckless-inspired, modal editor based on multiple-selections.
+An editor to implement some ideas about code editors I've had 
