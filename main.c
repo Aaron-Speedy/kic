@@ -99,7 +99,6 @@ int main() {
       write(1, buffer.lines[i].str, buffer.lines[i].len);
     }
     move_cursor(sels_head->cursor_line, sels_head->cursor_column);
-    fflush(stdout);
   }
 
   return 0;

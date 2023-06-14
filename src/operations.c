@@ -61,7 +61,7 @@ int backspace(Buffer *buffer, Selection *sel, ...) { // Args: N/A
   return 0;
 }
 int move_right(Buffer *buffer, Selection *sel, ...) { // Args: N/A
-  if(sel->cursor_column++ == buffer[sel->cursor_line].len) sel->cursor_column--;
+  if(sel->cursor_column++ >= buffer->lines[sel->cursor_line].len) sel->cursor_column--;
   sel->anchor_column = sel->cursor_column;
   sel->anchor_line = sel->cursor_line;
 
