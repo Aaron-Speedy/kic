@@ -13,7 +13,7 @@
 
 #define szstr(str) str, sizeof(str)
 #define clear_line() write(1, szstr("\x1b[2K"));
-
+#define move_cursor(line, column) printf("\x1b[%zu;%zuH", line + 1, column + 1); fflush(stdout);
 typedef struct {
   char key;
 } Key;
@@ -42,7 +42,7 @@ int main() {
   // Prepare TUI
   write(1, szstr("\x1b[?1049h")); // Switch to alternate buffer
   write(1, szstr("\x1b[2J")); // Clear the screen and disable scrollback.
-  write(1, szstr("\x1b[0;0H"));
+  move_cursor((size_t)0, (size_t)0);
 
   // Disable line buffering and echo
   struct termios t;
@@ -92,11 +92,14 @@ int main() {
       } break;
     }
 
-    clear_line();
-    write(1, szstr("\x1b[0;0H"));
-    write(1, buffer.lines[0].str, buffer.lines[0].len);
-    printf("\x1b[0;%zuH", sels_head->cursor_column + 1);
-    fflush(stdout);
+    size_t upper_bound = ws.ws_row > buffer.len ? ws.ws_row : buffer.len;
+    for(size_t i = 0; i < upper_bound; i++) {
+      move_cursor(i, (size_t)0);
+      clear_line();
+      write(1, buffer.lines[i].str, buffer.lines[i].len);
+      move_cursor(sels_head->cursor_line, sels_head->cursor_column);
+      fflush(stdout);
+    }
   }
 
   return 0;
