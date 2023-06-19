@@ -14,4 +14,6 @@ int backspace(Buffer *buffer, Selection *sel, ...); // Args: N/A
 int move_right(Buffer *buffer, Selection *sel, ...); // Args: N/A
 int move_left(Buffer *buffer, Selection *sel, ...); // Args: N/A
 int move_up(Buffer *buffer, Selection *sel, ...); // Args: N/A
+int move_down(Buffer *buffer, Selection *sel, ...); // Args: N/A
+
 #endif

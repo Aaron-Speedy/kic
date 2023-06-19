@@ -38,6 +38,10 @@ int main() {
     .alloc_len = 1,
   };
   buffer.lines[0].str = malloc(1);
+  // buffer.lines[1].str = malloc(1);
+  // buffer.lines[2].str = malloc(1);
+  // buffer.lines[3].str = malloc(1);
+  // buffer.lines[4].str = malloc(1);
 
   // Prepare TUI
   write(1, szstr("\x1b[?1049h")); // Switch to alternate buffer
@@ -73,6 +77,12 @@ int main() {
           case 'h':
             move_left(&buffer, sels_head);
             break;
+          case 'j':
+            move_down(&buffer, sels_head);
+            break;
+          case 'k':
+            move_up(&buffer, sels_head);
+            break;
           case 'l':
             move_right(&buffer, sels_head);
             break;
@@ -96,7 +106,7 @@ int main() {
     for(size_t i = 0; i < upper_bound; i++) {
       move_cursor(i, (size_t)0);
       clear_line();
-      write(1, buffer.lines[i].str, buffer.lines[i].len);
+      write(1, buffer.lines[i].str, buffer.lines[i].len > ws.ws_col ? ws.ws_col : buffer.lines[i].len);
     }
     move_cursor(sels_head->cursor_line, sels_head->cursor_column);
   }

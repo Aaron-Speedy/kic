@@ -68,7 +68,23 @@ int move_right(Buffer *buffer, Selection *sel, ...) { // Args: N/A
   return 0;
 }
 int move_left(Buffer *buffer, Selection *sel, ...) { // Args: N/A
-  if(sel->cursor_column) sel->cursor_column--;
+  if(sel->cursor_column > 0) sel->cursor_column--;
+
+  sel->anchor_column = sel->cursor_column;
+  sel->anchor_line = sel->cursor_line;
+
+  return 0;
+}
+int move_up(Buffer *buffer, Selection *sel, ...) { // Args: N/A
+  if(sel->cursor_line > 0) sel->cursor_line--;
+
+  sel->anchor_column = sel->cursor_column;
+  sel->anchor_line = sel->cursor_line;
+
+  return 0;
+}
+int move_down(Buffer *buffer, Selection *sel, ...) { // Args: N/A
+  if(sel->cursor_line++ >= buffer->len - 1) sel->cursor_line--;
 
   sel->anchor_column = sel->cursor_column;
   sel->anchor_line = sel->cursor_line;
