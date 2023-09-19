@@ -9,10 +9,14 @@
 #include <termios.h>
 #include <unistd.h>
 
+#define SSTUI_IMPLEMENTATION
+#include "sstui.h"
+
 #define return_defer(value) do { result = (value); goto defer; } while(0)
 
 int main(void)
 {
+    sst_init_tui();
     int result = 0;
     bool terminal_prepared = false;
     if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
@@ -39,16 +43,19 @@ int main(void)
         // TODO: what's the biggest escape sequence?
         // Or maybe we can try to read until we get EAGAIN?
         // That way the max size of the sequence does not really matter
-        char seq[32];
+        char seq[128];
         memset(seq, 0, sizeof(seq));
         int ret = read(STDIN_FILENO, seq, sizeof(seq));
         if (ret < 0) {
             fprintf(stderr, "ERROR: something went wrong during reading user input: %s\n", strerror(errno));
             return_defer(1);
         }
-        assert(ret < 32);
+        assert(ret < 218);
         for (int i = 0; i < ret; ++i) {
             printf("%d ", seq[i]);
+        }
+        if (seq[0] == 'q') {
+          exit(EXIT_SUCCESS);
         }
         printf(": ");
         for (int i = 0; i < ret; ++i) {
