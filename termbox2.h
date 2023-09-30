@@ -634,6 +634,9 @@ int tb_get_fds(int *ttyfd, int *resizefd);
 /* Print and printf functions. Specify param out_w to determine width of printed
  * string.
  */
+int tb_print_len(int x, int y, uintattr_t fg, uintattr_t bg, const char *str, size_t len);
+int tb_print_ex_len(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
+    const char *str, size_t len);
 int tb_print(int x, int y, uintattr_t fg, uintattr_t bg, const char *str);
 int tb_printf(int x, int y, uintattr_t fg, uintattr_t bg, const char *fmt, ...);
 int tb_print_ex(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
@@ -1803,6 +1806,36 @@ int tb_get_fds(int *ttyfd, int *resizefd) {
     return TB_OK;
 }
 
+int tb_print_len(int x, int y, uintattr_t fg, uintattr_t bg, const char *str, size_t len) {
+    return tb_print_ex_len(x, y, fg, bg, NULL, str, len);
+}
+
+int tb_print_ex_len(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
+    const char *str, size_t len) {
+    int rv;
+    uint32_t uni;
+    int w, ix = x;
+    if (out_w) {
+        *out_w = 0;
+    }
+    for (int i = 0; i < len; ) {
+      i += tb_utf8_char_to_unicode(&uni, &str[i]);
+      w = wcwidth((wchar_t)uni);
+        if (w < 0) {
+            w = 1;
+        }
+        if (w == 0 && x > ix) {
+            if_err_return(rv, tb_extend_cell(x - 1, y, uni));
+        } else {
+            if_err_return(rv, tb_set_cell(x, y, uni, fg, bg));
+        }
+        x += w;
+        if (out_w) {
+            *out_w += w;
+        }
+    }
+    return TB_OK;
+}
 int tb_print(int x, int y, uintattr_t fg, uintattr_t bg, const char *str) {
     return tb_print_ex(x, y, fg, bg, NULL, str);
 }
