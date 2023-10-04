@@ -47,23 +47,54 @@ void insert_line(Buffer *buffer, Line *line, size_t y_pos) {
   }
 
   memmove(&buffer->lines[y_pos + 1], &buffer->lines[y_pos], sizeof(Line) * (buffer->num_lines - y_pos));
-  memcpy(&buffer->lines[y_pos], line, sizeof(Line) * 1);
+  memcpy(&buffer->lines[y_pos].content, line->content, sizeof(char) * line->len);
+  buffer->lines[y_pos].content = line->content;
+  buffer->lines[y_pos].len = line->len;
+  buffer->lines[y_pos].cap = line->len;
   buffer->num_lines += 1;
 }
 
 int main(void) {
-  Buffer buffer = {
-    .lines = malloc(sizeof(Line) * 1),
-    .num_lines = 1,
-    .lines_cap = 1,
-  }; 
-  buffer.lines[0].content = malloc(1);
-  buffer.lines[0].len = 0;
-  buffer.lines[0].cap = 1;
-
   size_t adjusted_cursor_x = 0;
   size_t saved_cursor_x = 0;
   size_t cursor_y = 0;
+
+  Buffer buffer = {
+    .lines = malloc(sizeof(Line) * 1),
+    .num_lines = 0,
+    .lines_cap = 1,
+  };
+  {
+    FILE *file = fopen("main.c", "r");
+    if (file == NULL) {
+      perror("Couldn't open file for reading");
+      exit(1);
+    }
+    Line line = {
+     .content = malloc(sizeof(char) * 1),
+     .len = 0,
+     .cap = 1,
+    };
+    size_t current_y = 0;
+    size_t current_x = 0;
+    char c;
+    while ((c = fgetc(file)) != EOF) {
+      if (c == '\n' || c == '\r' || c == '\0') {
+        insert_line(&buffer, &line, current_y);
+        current_y += 1;
+        current_x = 0;
+
+        line.len = 0;
+        line.cap = 0;
+        line.content = malloc(sizeof(char) * 1);
+        continue;
+      }
+      insert(&line, &c, 1, current_x);
+      current_x += 1;
+    }
+    fclose(file);
+
+  }
 
   int tb_init_ret = tb_init();
   if (tb_init_ret) {
@@ -75,6 +106,16 @@ int main(void) {
   struct tb_event ev;
 
   Mode mode = MODE_NORMAL;
+  tb_clear();
+  for (int i = 0; i < buffer.num_lines; i++) {
+    tb_print_len(0, i, TB_WHITE, 0, buffer.lines[i].content, buffer.lines[i].len);
+  }
+  uintattr_t color = 0;
+  if (mode == MODE_INSERT) color = TB_RED;
+  if (mode == MODE_NORMAL) color = TB_BLUE;
+  if (adjusted_cursor_x == buffer.lines[cursor_y].len) tb_set_cell(adjusted_cursor_x, cursor_y, 0, 0, color);
+  else tb_set_cell(adjusted_cursor_x, cursor_y, buffer.lines[cursor_y].content[adjusted_cursor_x], 0, color);
+  tb_present();
   while (tb_poll_event(&ev) == TB_OK) {
     switch (ev.type) {
       case TB_EVENT_KEY: {
