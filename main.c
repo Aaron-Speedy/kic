@@ -47,7 +47,6 @@ void insert_line(Buffer *buffer, Line *line, size_t y_pos) {
   }
 
   memmove(&buffer->lines[y_pos + 1], &buffer->lines[y_pos], sizeof(Line) * (buffer->num_lines - y_pos));
-  memcpy(&buffer->lines[y_pos].content, line->content, sizeof(char) * line->len);
   buffer->lines[y_pos].content = line->content;
   buffer->lines[y_pos].len = line->len;
   buffer->lines[y_pos].cap = line->len;
