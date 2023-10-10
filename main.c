@@ -19,6 +19,7 @@ typedef struct {
   size_t adjusted_cursor_x;
   size_t saved_cursor_x;
   size_t cursor_y;
+  Mode mode;
   const char *file_path;
 } Buffer;
 
@@ -73,6 +74,7 @@ int main(void) {
     .adjusted_cursor_x = 0,
     .saved_cursor_x = 0,
     .cursor_y = 0,
+    .mode = MODE_NORMAL,
     .file_path = "main.c",
   };
 
@@ -118,27 +120,26 @@ int main(void) {
   tb_set_input_mode(TB_INPUT_ESC | TB_INPUT_MOUSE);
   struct tb_event ev;
 
-  Mode mode = MODE_NORMAL;
   tb_clear();
   for (int i = 0; i < buffer.num_lines; i++) {
     tb_print_len(0, i, TB_WHITE, 0, buffer.lines[i].content, buffer.lines[i].len);
   }
   uintattr_t color = 0;
-  if (mode == MODE_INSERT) color = TB_RED;
-  if (mode == MODE_NORMAL) color = TB_BLUE;
+  if (buffer.mode == MODE_INSERT) color = TB_RED;
+  if (buffer.mode == MODE_NORMAL) color = TB_BLUE;
   if (buffer.adjusted_cursor_x == buffer.lines[buffer.cursor_y].len) tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, 0, 0, color);
   else tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, buffer.lines[buffer.cursor_y].content[buffer.adjusted_cursor_x], 0, color);
   tb_present();
   while (tb_poll_event(&ev) == TB_OK) {
     switch (ev.type) {
       case TB_EVENT_KEY: {
-        switch (mode) {
+        switch (buffer.mode) {
           case MODE_NORMAL: {
             if (ev.key == TB_KEY_CTRL_Q) {
               goto end;
             }
             if (ev.ch == 'i') {
-              mode = MODE_INSERT;
+              buffer.mode = MODE_INSERT;
             }
             if (ev.ch == 'o') {
               Line new_line = {
@@ -151,7 +152,7 @@ int main(void) {
               buffer.adjusted_cursor_x = 0;
               buffer.cursor_y += 1;
 
-              mode = MODE_INSERT;
+              buffer.mode = MODE_INSERT;
             }
             if (ev.ch == 'j' && buffer.cursor_y < buffer.num_lines - 1) {
               buffer.cursor_y += 1;
@@ -182,7 +183,7 @@ int main(void) {
               buffer.saved_cursor_x = buffer.adjusted_cursor_x;
             }
             if (ev.key == TB_KEY_ESC) {
-              mode = MODE_NORMAL;
+              buffer.mode = MODE_NORMAL;
             }
           } break;
         }
@@ -194,8 +195,8 @@ int main(void) {
       tb_print_len(0, i, TB_WHITE, 0, buffer.lines[i].content, buffer.lines[i].len);
     }
     uintattr_t color = 0;
-    if (mode == MODE_INSERT) color = TB_RED;
-    if (mode == MODE_NORMAL) color = TB_BLUE;
+    if (buffer.mode == MODE_INSERT) color = TB_RED;
+    if (buffer.mode == MODE_NORMAL) color = TB_BLUE;
     if (buffer.adjusted_cursor_x == buffer.lines[buffer.cursor_y].len) tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, 0, 0, color);
     else tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, buffer.lines[buffer.cursor_y].content[buffer.adjusted_cursor_x], 0, color);
     tb_present();
