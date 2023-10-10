@@ -66,6 +66,19 @@ void write_buffer_to_file(Buffer *buffer) {
   }
 }
 
+void draw_terminal(Buffer *buffer) {
+  tb_clear();
+  for (int i = 0; i < buffer->num_lines; i++) {
+    tb_print_len(0, i, TB_WHITE, 0, buffer->lines[i].content, buffer->lines[i].len);
+  }
+  uintattr_t color = 0;
+  if (buffer->mode == MODE_INSERT) color = TB_RED;
+  if (buffer->mode == MODE_NORMAL) color = TB_BLUE;
+  if (buffer->adjusted_cursor_x == buffer->lines[buffer->cursor_y].len) tb_set_cell(buffer->adjusted_cursor_x, buffer->cursor_y, 0, 0, color);
+  else tb_set_cell(buffer->adjusted_cursor_x, buffer->cursor_y, buffer->lines[buffer->cursor_y].content[buffer->adjusted_cursor_x], 0, color);
+  tb_present();
+}
+
 int main(void) {
   Buffer buffer = {
     .lines = malloc(sizeof(Line) * 1),
@@ -120,16 +133,7 @@ int main(void) {
   tb_set_input_mode(TB_INPUT_ESC | TB_INPUT_MOUSE);
   struct tb_event ev;
 
-  tb_clear();
-  for (int i = 0; i < buffer.num_lines; i++) {
-    tb_print_len(0, i, TB_WHITE, 0, buffer.lines[i].content, buffer.lines[i].len);
-  }
-  uintattr_t color = 0;
-  if (buffer.mode == MODE_INSERT) color = TB_RED;
-  if (buffer.mode == MODE_NORMAL) color = TB_BLUE;
-  if (buffer.adjusted_cursor_x == buffer.lines[buffer.cursor_y].len) tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, 0, 0, color);
-  else tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, buffer.lines[buffer.cursor_y].content[buffer.adjusted_cursor_x], 0, color);
-  tb_present();
+  draw_terminal(&buffer);
   while (tb_poll_event(&ev) == TB_OK) {
     switch (ev.type) {
       case TB_EVENT_KEY: {
@@ -189,17 +193,7 @@ int main(void) {
         }
       } break;
     }
-
-    tb_clear();
-    for (int i = 0; i < buffer.num_lines; i++) {
-      tb_print_len(0, i, TB_WHITE, 0, buffer.lines[i].content, buffer.lines[i].len);
-    }
-    uintattr_t color = 0;
-    if (buffer.mode == MODE_INSERT) color = TB_RED;
-    if (buffer.mode == MODE_NORMAL) color = TB_BLUE;
-    if (buffer.adjusted_cursor_x == buffer.lines[buffer.cursor_y].len) tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, 0, 0, color);
-    else tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, buffer.lines[buffer.cursor_y].content[buffer.adjusted_cursor_x], 0, color);
-    tb_present();
+    draw_terminal(&buffer);
   }
 
 end:
