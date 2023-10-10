@@ -16,6 +16,9 @@ typedef struct {
   Line *lines;
   size_t num_lines;
   size_t lines_cap;
+  size_t adjusted_cursor_x;
+  size_t saved_cursor_x;
+  size_t cursor_y;
   const char *file_path;
 } Buffer;
 
@@ -63,14 +66,13 @@ void write_buffer_to_file(Buffer *buffer) {
 }
 
 int main(void) {
-  size_t adjusted_cursor_x = 0;
-  size_t saved_cursor_x = 0;
-  size_t cursor_y = 0;
-
   Buffer buffer = {
     .lines = malloc(sizeof(Line) * 1),
     .num_lines = 0,
     .lines_cap = 1,
+    .adjusted_cursor_x = 0,
+    .saved_cursor_x = 0,
+    .cursor_y = 0,
     .file_path = "main.c",
   };
 
@@ -124,8 +126,8 @@ int main(void) {
   uintattr_t color = 0;
   if (mode == MODE_INSERT) color = TB_RED;
   if (mode == MODE_NORMAL) color = TB_BLUE;
-  if (adjusted_cursor_x == buffer.lines[cursor_y].len) tb_set_cell(adjusted_cursor_x, cursor_y, 0, 0, color);
-  else tb_set_cell(adjusted_cursor_x, cursor_y, buffer.lines[cursor_y].content[adjusted_cursor_x], 0, color);
+  if (buffer.adjusted_cursor_x == buffer.lines[buffer.cursor_y].len) tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, 0, 0, color);
+  else tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, buffer.lines[buffer.cursor_y].content[buffer.adjusted_cursor_x], 0, color);
   tb_present();
   while (tb_poll_event(&ev) == TB_OK) {
     switch (ev.type) {
@@ -144,28 +146,28 @@ int main(void) {
                 .len = 0,
                 .cap = 1,
               };
-              insert_line(&buffer, &new_line, cursor_y + 1);
-              saved_cursor_x = 0;
-              adjusted_cursor_x = 0;
-              cursor_y += 1;
+              insert_line(&buffer, &new_line, buffer.cursor_y + 1);
+              buffer.saved_cursor_x = 0;
+              buffer.adjusted_cursor_x = 0;
+              buffer.cursor_y += 1;
 
               mode = MODE_INSERT;
             }
-            if (ev.ch == 'j' && cursor_y < buffer.num_lines - 1) {
-              cursor_y += 1;
-              adjusted_cursor_x = saved_cursor_x > buffer.lines[cursor_y].len ? buffer.lines[cursor_y].len : saved_cursor_x;
+            if (ev.ch == 'j' && buffer.cursor_y < buffer.num_lines - 1) {
+              buffer.cursor_y += 1;
+              buffer.adjusted_cursor_x = buffer.saved_cursor_x > buffer.lines[buffer.cursor_y].len ? buffer.lines[buffer.cursor_y].len : buffer.saved_cursor_x;
             }
-            if (ev.ch == 'k' && cursor_y > 0) {
-              cursor_y -= 1;
-              adjusted_cursor_x = saved_cursor_x > buffer.lines[cursor_y].len ? buffer.lines[cursor_y].len : saved_cursor_x;
+            if (ev.ch == 'k' && buffer.cursor_y > 0) {
+              buffer.cursor_y -= 1;
+              buffer.adjusted_cursor_x = buffer.saved_cursor_x > buffer.lines[buffer.cursor_y].len ? buffer.lines[buffer.cursor_y].len : buffer.saved_cursor_x;
             }
-            if (ev.ch == 'h' && adjusted_cursor_x > 0) {
-              adjusted_cursor_x -= 1;
-              saved_cursor_x = adjusted_cursor_x;
+            if (ev.ch == 'h' && buffer.adjusted_cursor_x > 0) {
+              buffer.adjusted_cursor_x -= 1;
+              buffer.saved_cursor_x = buffer.adjusted_cursor_x;
             }
-            if (ev.ch == 'l' && adjusted_cursor_x < buffer.lines[cursor_y].len) {
-              adjusted_cursor_x += 1;
-              saved_cursor_x = adjusted_cursor_x;
+            if (ev.ch == 'l' && buffer.adjusted_cursor_x < buffer.lines[buffer.cursor_y].len) {
+              buffer.adjusted_cursor_x += 1;
+              buffer.saved_cursor_x = buffer.adjusted_cursor_x;
             }
             if (ev.key == TB_KEY_ESC) {
               write_buffer_to_file(&buffer);
@@ -175,9 +177,9 @@ int main(void) {
           case MODE_INSERT: {
             if (ev.ch >= ' ' && ev.ch <= '~') {
               char in[] = { ev.ch };
-              insert(&buffer.lines[cursor_y], in, 1, adjusted_cursor_x);
-              adjusted_cursor_x += 1;
-              saved_cursor_x = adjusted_cursor_x;
+              insert(&buffer.lines[buffer.cursor_y], in, 1, buffer.adjusted_cursor_x);
+              buffer.adjusted_cursor_x += 1;
+              buffer.saved_cursor_x = buffer.adjusted_cursor_x;
             }
             if (ev.key == TB_KEY_ESC) {
               mode = MODE_NORMAL;
@@ -194,8 +196,8 @@ int main(void) {
     uintattr_t color = 0;
     if (mode == MODE_INSERT) color = TB_RED;
     if (mode == MODE_NORMAL) color = TB_BLUE;
-    if (adjusted_cursor_x == buffer.lines[cursor_y].len) tb_set_cell(adjusted_cursor_x, cursor_y, 0, 0, color);
-    else tb_set_cell(adjusted_cursor_x, cursor_y, buffer.lines[cursor_y].content[adjusted_cursor_x], 0, color);
+    if (buffer.adjusted_cursor_x == buffer.lines[buffer.cursor_y].len) tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, 0, 0, color);
+    else tb_set_cell(buffer.adjusted_cursor_x, buffer.cursor_y, buffer.lines[buffer.cursor_y].content[buffer.adjusted_cursor_x], 0, color);
     tb_present();
   }
 
