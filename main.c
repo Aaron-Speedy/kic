@@ -53,6 +53,14 @@ void insert_line(Buffer *buffer, Line *line, size_t y_pos) {
   buffer->num_lines += 1;
 }
 
+void write_buffer_to_file(Buffer *buffer, const char *file_path) {
+  int fd = open(file_path, O_CREAT | O_WRONLY);
+  for (int i = 0; i < buffer->num_lines; i++) {
+    write(fd, buffer->lines[i].content, buffer->lines[i].len);
+    write(fd, "\n", 1);
+  }
+}
+
 int main(void) {
   size_t adjusted_cursor_x = 0;
   size_t saved_cursor_x = 0;
@@ -63,6 +71,8 @@ int main(void) {
     .num_lines = 0,
     .lines_cap = 1,
   };
+
+  const char *file_path = "main.c";
   {
     FILE *file = fopen("main.c", "r");
     if (file == NULL) {
@@ -78,7 +88,8 @@ int main(void) {
     size_t current_x = 0;
     char c;
     while ((c = fgetc(file)) != EOF) {
-      if (c == '\n' || c == '\r' || c == '\0') {
+      if (c == '\r') continue;
+      if (c == '\n' || c == '\0') {
         insert_line(&buffer, &line, current_y);
         current_y += 1;
         current_x = 0;
@@ -154,6 +165,9 @@ int main(void) {
             if (ev.ch == 'l' && adjusted_cursor_x < buffer.lines[cursor_y].len) {
               adjusted_cursor_x += 1;
               saved_cursor_x = adjusted_cursor_x;
+            }
+            if (ev.key == TB_KEY_ESC) {
+              write_buffer_to_file(&buffer, "main.c");
             }
           } break;
 
