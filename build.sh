@@ -2,4 +2,6 @@
 
 set -xe
 
-gcc main.c -o swir -Wall -ggdb -O3 -std=c99 -pedantic
+CC="${CXX:-cc}"
+
+$CC main.c -o swir -Wall -ggdb -O3 -std=c99 -pedantic
