@@ -16,6 +16,7 @@ typedef struct {
   Line *lines;
   size_t num_lines;
   size_t lines_cap;
+  const char *file_path;
 } Buffer;
 
 void insert(Line *line, char *str, size_t str_len, size_t index) {
@@ -53,8 +54,8 @@ void insert_line(Buffer *buffer, Line *line, size_t y_pos) {
   buffer->num_lines += 1;
 }
 
-void write_buffer_to_file(Buffer *buffer, const char *file_path) {
-  int fd = open(file_path, O_CREAT | O_WRONLY);
+void write_buffer_to_file(Buffer *buffer) {
+  int fd = open(buffer->file_path, O_CREAT | O_WRONLY);
   for (int i = 0; i < buffer->num_lines; i++) {
     write(fd, buffer->lines[i].content, buffer->lines[i].len);
     write(fd, "\n", 1);
@@ -70,11 +71,11 @@ int main(void) {
     .lines = malloc(sizeof(Line) * 1),
     .num_lines = 0,
     .lines_cap = 1,
+    .file_path = "main.c",
   };
 
-  const char *file_path = "main.c";
   {
-    FILE *file = fopen("main.c", "r");
+    FILE *file = fopen(buffer.file_path, "r");
     if (file == NULL) {
       perror("Couldn't open file for reading");
       exit(1);
@@ -167,7 +168,7 @@ int main(void) {
               saved_cursor_x = adjusted_cursor_x;
             }
             if (ev.key == TB_KEY_ESC) {
-              write_buffer_to_file(&buffer, "main.c");
+              write_buffer_to_file(&buffer);
             }
           } break;
 
