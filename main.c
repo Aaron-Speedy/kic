@@ -80,7 +80,13 @@ void draw_terminal(Buffer *buffer) {
   tb_present();
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  if (argc > 2 || argc < 2) {
+    printf("Invalid parameters\n");
+    printf("Usage: %s [FILE]\n", argv[0]);
+    exit(EXIT_FAILURE);
+  }
+
   Buffer buffer = {
     .lines = malloc(sizeof(Line) * 1),
     .num_lines = 0,
@@ -90,11 +96,11 @@ int main(void) {
     .cursor_y = 0,
     .view_top = 0,
     .mode = MODE_NORMAL,
-    .file_path = "main.c",
+    .file_path = argv[1],
   };
 
   {
-    FILE *file = fopen(buffer.file_path, "r");
+    FILE *file = fopen(buffer.file_path, "a+");
     if (file == NULL) {
       perror("Couldn't open file for reading");
       exit(1);
@@ -107,7 +113,9 @@ int main(void) {
     size_t current_y = 0;
     size_t current_x = 0;
     char c;
+    int messed_with = 0;
     while ((c = fgetc(file)) != EOF) {
+      messed_with = 1;
       if (c == '\r') continue;
       if (c == '\n' || c == '\0') {
         insert_line(&buffer, &line, current_y);
@@ -121,6 +129,9 @@ int main(void) {
       }
       insert(&line, &c, 1, current_x);
       current_x += 1;
+    }
+    if (!messed_with) {
+      insert_line(&buffer, &line, current_y);
     }
     fclose(file);
 
