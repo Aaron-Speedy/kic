@@ -19,6 +19,7 @@ typedef struct {
   size_t adjusted_cursor_x;
   size_t saved_cursor_x;
   size_t cursor_y;
+  size_t view_top;
   Mode mode;
   const char *file_path;
 } Buffer;
@@ -68,14 +69,14 @@ void write_buffer_to_file(Buffer *buffer) {
 
 void draw_terminal(Buffer *buffer) {
   tb_clear();
-  for (int i = 0; i < buffer->num_lines; i++) {
-    tb_print_len(0, i, TB_WHITE, 0, buffer->lines[i].content, buffer->lines[i].len);
+  for (int i = buffer->view_top; i < buffer->view_top + tb_height() && i < buffer->num_lines; i++) {
+    tb_print_len(0, i - buffer->view_top, TB_WHITE, 0, buffer->lines[i].content, buffer->lines[i].len);
   }
   uintattr_t color = 0;
   if (buffer->mode == MODE_INSERT) color = TB_RED;
   if (buffer->mode == MODE_NORMAL) color = TB_BLUE;
-  if (buffer->adjusted_cursor_x == buffer->lines[buffer->cursor_y].len) tb_set_cell(buffer->adjusted_cursor_x, buffer->cursor_y, 0, 0, color);
-  else tb_set_cell(buffer->adjusted_cursor_x, buffer->cursor_y, buffer->lines[buffer->cursor_y].content[buffer->adjusted_cursor_x], 0, color);
+  if (buffer->adjusted_cursor_x == buffer->lines[buffer->cursor_y].len) tb_set_cell(buffer->adjusted_cursor_x, buffer->cursor_y - buffer->view_top, 0, 0, color);
+  else tb_set_cell(buffer->adjusted_cursor_x, buffer->cursor_y - buffer->view_top, buffer->lines[buffer->cursor_y].content[buffer->adjusted_cursor_x], 0, color);
   tb_present();
 }
 
@@ -87,6 +88,7 @@ int main(void) {
     .adjusted_cursor_x = 0,
     .saved_cursor_x = 0,
     .cursor_y = 0,
+    .view_top = 0,
     .mode = MODE_NORMAL,
     .file_path = "main.c",
   };
@@ -160,10 +162,16 @@ int main(void) {
             }
             if (ev.ch == 'j' && buffer.cursor_y < buffer.num_lines - 1) {
               buffer.cursor_y += 1;
+              if (buffer.cursor_y >= buffer.view_top + tb_height()) {
+                buffer.view_top += 1;
+              }
               buffer.adjusted_cursor_x = buffer.saved_cursor_x > buffer.lines[buffer.cursor_y].len ? buffer.lines[buffer.cursor_y].len : buffer.saved_cursor_x;
             }
             if (ev.ch == 'k' && buffer.cursor_y > 0) {
               buffer.cursor_y -= 1;
+              if (buffer.cursor_y < buffer.view_top) {
+                buffer.view_top -= 1;
+              }
               buffer.adjusted_cursor_x = buffer.saved_cursor_x > buffer.lines[buffer.cursor_y].len ? buffer.lines[buffer.cursor_y].len : buffer.saved_cursor_x;
             }
             if (ev.ch == 'h' && buffer.adjusted_cursor_x > 0) {
