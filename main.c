@@ -16,7 +16,7 @@ typedef struct {
   Line *lines;
   size_t num_lines;
   size_t lines_cap;
-  size_t adjusted_cursor_x;
+  size_t cursor_x;
   size_t saved_cursor_x;
   size_t cursor_y;
   size_t view_top;
@@ -24,7 +24,7 @@ typedef struct {
   const char *file_path;
 } Buffer;
 
-void insert(Line *line, char *str, size_t str_len, size_t index) {
+void insert(Line *line, char *str, size_t str_len, size_t x) {
   if (line->len + str_len >= line->cap) {
     line->cap = line->len * 2 + str_len;
     char *new_content = realloc(line->content, sizeof(char) * line->cap);
@@ -36,12 +36,12 @@ void insert(Line *line, char *str, size_t str_len, size_t index) {
     line->content = new_content;
   }
 
-  memmove(&line->content[index + str_len], &line->content[index], sizeof(char) * (line->len - index));
-  memcpy(&line->content[index], str, sizeof(char) * str_len);
+  memmove(&line->content[x + str_len], &line->content[x], sizeof(char) * (line->len - x));
+  memcpy(&line->content[x], str, sizeof(char) * str_len);
   line->len += str_len;
 }
 
-void insert_line(Buffer *buffer, Line *line, size_t y_pos) {
+void insert_line(Buffer *buffer, Line *line, size_t y) {
   if (buffer->num_lines + 1 >= buffer->lines_cap) {
     buffer->lines_cap = buffer->num_lines * 2 + 1;
     Line *new_buffer_lines = realloc(buffer->lines, sizeof(Line) * buffer->lines_cap);
@@ -52,19 +52,36 @@ void insert_line(Buffer *buffer, Line *line, size_t y_pos) {
     buffer->lines = new_buffer_lines;
   }
 
-  memmove(&buffer->lines[y_pos + 1], &buffer->lines[y_pos], sizeof(Line) * (buffer->num_lines - y_pos));
-  buffer->lines[y_pos].content = line->content;
-  buffer->lines[y_pos].len = line->len;
-  buffer->lines[y_pos].cap = line->len;
+  memmove(&buffer->lines[y + 1], &buffer->lines[y], sizeof(Line) * (buffer->num_lines - y));
+  buffer->lines[y].content = line->content;
+  buffer->lines[y].len = line->len;
+  buffer->lines[y].cap = line->len;
   buffer->num_lines += 1;
 }
 
+void remove_span(Buffer *buffer, size_t len, size_t x, size_t y) {
+  if (x - 1 + len == buffer->lines[y].len) {
+    if (y < buffer->num_lines - 1) {
+      insert(&buffer->lines[y], buffer->lines[y + 1].content, buffer->lines[y + 1].len, x);
+      free(buffer->lines[y + 1].content);
+      memmove(&buffer->lines[y + 1], &buffer->lines[y + 2], sizeof(Line) * (buffer->num_lines - y));
+      buffer->num_lines -= 1;
+    }
+    len -= 1;
+  }
+  else {
+    memmove(&buffer->lines[y].content[x], &buffer->lines[y].content[x + len], sizeof(char) * (buffer->lines[y].len - x - len));
+    buffer->lines[y].len -= 1;
+  }
+}
+
 void write_buffer_to_file(Buffer *buffer) {
-  int fd = open(buffer->file_path, O_CREAT | O_WRONLY);
+  int fd = open(buffer->file_path, O_CREAT | O_WRONLY | O_TRUNC);
   for (int i = 0; i < buffer->num_lines; i++) {
     write(fd, buffer->lines[i].content, buffer->lines[i].len);
     write(fd, "\n", 1);
   }
+  close(fd);
 }
 
 void draw_terminal(Buffer *buffer) {
@@ -75,8 +92,8 @@ void draw_terminal(Buffer *buffer) {
   uintattr_t color = 0;
   if (buffer->mode == MODE_INSERT) color = TB_RED;
   if (buffer->mode == MODE_NORMAL) color = TB_BLUE;
-  if (buffer->adjusted_cursor_x == buffer->lines[buffer->cursor_y].len) tb_set_cell(buffer->adjusted_cursor_x, buffer->cursor_y - buffer->view_top, 0, 0, color);
-  else tb_set_cell(buffer->adjusted_cursor_x, buffer->cursor_y - buffer->view_top, buffer->lines[buffer->cursor_y].content[buffer->adjusted_cursor_x], 0, color);
+  if (buffer->cursor_x == buffer->lines[buffer->cursor_y].len) tb_set_cell(buffer->cursor_x, buffer->cursor_y - buffer->view_top, 0, 0, color);
+  else tb_set_cell(buffer->cursor_x, buffer->cursor_y - buffer->view_top, buffer->lines[buffer->cursor_y].content[buffer->cursor_x], 0, color);
   tb_present();
 }
 
@@ -91,7 +108,7 @@ int main(int argc, char **argv) {
     .lines = malloc(sizeof(Line) * 1),
     .num_lines = 0,
     .lines_cap = 1,
-    .adjusted_cursor_x = 0,
+    .cursor_x = 0,
     .saved_cursor_x = 0,
     .cursor_y = 0,
     .view_top = 0,
@@ -166,32 +183,35 @@ int main(int argc, char **argv) {
               };
               insert_line(&buffer, &new_line, buffer.cursor_y + 1);
               buffer.saved_cursor_x = 0;
-              buffer.adjusted_cursor_x = 0;
+              buffer.cursor_x = 0;
               buffer.cursor_y += 1;
 
               buffer.mode = MODE_INSERT;
+            }
+            if (ev.ch == 'd') {
+              remove_span(&buffer, 1, buffer.cursor_x, buffer.cursor_y);
             }
             if (ev.ch == 'j' && buffer.cursor_y < buffer.num_lines - 1) {
               buffer.cursor_y += 1;
               if (buffer.cursor_y >= buffer.view_top + tb_height()) {
                 buffer.view_top += 1;
               }
-              buffer.adjusted_cursor_x = buffer.saved_cursor_x > buffer.lines[buffer.cursor_y].len ? buffer.lines[buffer.cursor_y].len : buffer.saved_cursor_x;
+              buffer.cursor_x = buffer.saved_cursor_x > buffer.lines[buffer.cursor_y].len ? buffer.lines[buffer.cursor_y].len : buffer.saved_cursor_x;
             }
             if (ev.ch == 'k' && buffer.cursor_y > 0) {
               buffer.cursor_y -= 1;
               if (buffer.cursor_y < buffer.view_top) {
                 buffer.view_top -= 1;
               }
-              buffer.adjusted_cursor_x = buffer.saved_cursor_x > buffer.lines[buffer.cursor_y].len ? buffer.lines[buffer.cursor_y].len : buffer.saved_cursor_x;
+              buffer.cursor_x = buffer.saved_cursor_x > buffer.lines[buffer.cursor_y].len ? buffer.lines[buffer.cursor_y].len : buffer.saved_cursor_x;
             }
-            if (ev.ch == 'h' && buffer.adjusted_cursor_x > 0) {
-              buffer.adjusted_cursor_x -= 1;
-              buffer.saved_cursor_x = buffer.adjusted_cursor_x;
+            if (ev.ch == 'h' && buffer.cursor_x > 0) {
+              buffer.cursor_x -= 1;
+              buffer.saved_cursor_x = buffer.cursor_x;
             }
-            if (ev.ch == 'l' && buffer.adjusted_cursor_x < buffer.lines[buffer.cursor_y].len) {
-              buffer.adjusted_cursor_x += 1;
-              buffer.saved_cursor_x = buffer.adjusted_cursor_x;
+            if (ev.ch == 'l' && buffer.cursor_x < buffer.lines[buffer.cursor_y].len) {
+              buffer.cursor_x += 1;
+              buffer.saved_cursor_x = buffer.cursor_x;
             }
             if (ev.key == TB_KEY_ESC) {
               write_buffer_to_file(&buffer);
@@ -201,12 +221,18 @@ int main(int argc, char **argv) {
           case MODE_INSERT: {
             if (ev.ch >= ' ' && ev.ch <= '~') {
               char in[] = { ev.ch };
-              insert(&buffer.lines[buffer.cursor_y], in, 1, buffer.adjusted_cursor_x);
-              buffer.adjusted_cursor_x += 1;
-              buffer.saved_cursor_x = buffer.adjusted_cursor_x;
+              insert(&buffer.lines[buffer.cursor_y], in, 1, buffer.cursor_x);
+              buffer.cursor_x += 1;
+              buffer.saved_cursor_x = buffer.cursor_x;
             }
             if (ev.key == TB_KEY_ESC) {
               buffer.mode = MODE_NORMAL;
+            }
+            if (ev.key == TB_KEY_CTRL_8) { // Backspace 
+              if (buffer.cursor_x > 0) {
+                remove_span(&buffer, 1, buffer.cursor_x - 1, buffer.cursor_y);
+                buffer.cursor_x -= 1;
+              }
             }
           } break;
         }
