@@ -40,6 +40,13 @@ typedef struct {
   const char *file_path;
 } Buffer;
 
+void get_ordered_cursors(Selection *sel, Cursor **buf) {
+  if (sel->anchor.y < sel->cursor.y) { buf[0] = &sel->anchor; buf[1] = &sel->cursor; return; };
+  if (sel->anchor.y > sel->cursor.y) { buf[0] = &sel->cursor; buf[1] = &sel->anchor; return; };
+  if (sel->anchor.x <= sel->cursor.x) { buf[0] = &sel->anchor; buf[1] = &sel->cursor; return; };
+  buf[0] = &sel->cursor, buf[1] = &sel->anchor;
+}
+
 void insert(Line *line, char *str, size_t str_len, size_t x) {
   if (line->len + str_len >= line->cap) {
     line->cap = line->len * 2 + str_len;
@@ -85,10 +92,8 @@ void remove_span(Buffer *buffer, size_t len, size_t x, size_t y) {
     }
     len -= 1;
   }
-  else {
-    memmove(&buffer->lines[y].content[x], &buffer->lines[y].content[x + len], sizeof(char) * (buffer->lines[y].len - x - len));
-    buffer->lines[y].len -= 1;
-  }
+  memmove(&buffer->lines[y].content[x], &buffer->lines[y].content[x + len], sizeof(char) * (buffer->lines[y].len - x - len));
+  buffer->lines[y].len -= len;
 }
 
 void write_buffer_to_file(Buffer *buffer) {
@@ -111,11 +116,20 @@ void draw_terminal(Buffer *buffer) {
   if (buffer->mode == MODE_INSERT) color = TB_RED;
   if (buffer->mode == MODE_NORMAL) color = TB_BLUE;
   for (int i = 0; i < buffer->num_sels; i++) {
-    int min_x = buffer->sels[i].anchor.x <= buffer->sels[i].cursor.x ? buffer->sels[i].anchor.x : buffer->sels[i].cursor.x;
-    int max_x = buffer->sels[i].anchor.x <= buffer->sels[i].cursor.x ? buffer->sels[i].cursor.x : buffer->sels[i].anchor.x;
-    for (int x = min_x; x <= max_x; x++) {
-      if (x == buffer->lines[buffer->sels[i].cursor.y].len) tb_set_cell(x, buffer->sels[i].cursor.y - buffer->view_top, 0, 0, color);
-      else tb_set_cell(x, buffer->sels[i].cursor.y - buffer->view_top, buffer->lines[buffer->sels[i].cursor.y].content[x], 0, color);
+    Cursor *ends[2] = { 0 };
+    get_ordered_cursors(&buffer->sels[i], ends);
+    int x = ends[0]->x;
+    for (int y = ends[0]->y; y < ends[1]->y; y++) {
+      for (; x <= buffer->lines[y].len; x++) {
+        if (x == buffer->lines[y].len) tb_set_cell(x, y - buffer->view_top, 0, 0, color);
+        else tb_set_cell(x, y - buffer->view_top, buffer->lines[y].content[x], 0, color);
+      }
+      x = 0;
+    }
+    // TODO: You could probably pull out the y from the first for loop and reuse the code with no alterations, but I'm tired
+    for (; x <= ends[1]->x; x++) { 
+      if (x == buffer->lines[ends[1]->y].len) tb_set_cell(x, ends[1]->y - buffer->view_top, 0, 0, color);
+      else tb_set_cell(x, ends[1]->y - buffer->view_top, buffer->lines[ends[1]->y].content[x], 0, color);
     }
   }
 
@@ -227,7 +241,17 @@ int main(int argc, char **argv) {
             }
             if (ev.ch == 'd') {
               for (int i = 0; i < buffer.num_sels; i++) {
-                remove_span(&buffer, 1, buffer.sels[i].cursor.x, buffer.sels[i].cursor.y);
+                Cursor *ends[2] = { 0 };
+                get_ordered_cursors(&buffer.sels[i], ends);
+                int x = ends[0]->x;
+                for (int y = ends[0]->y; y < ends[1]->y; y++) {
+                  remove_span(&buffer, buffer.lines[y].len - x + 1, x, y);
+                  x = 0;
+                }
+                remove_span(&buffer, ends[1]->x - x + 1, x, ends[1]->y);
+                ends[1]->x = ends[0]->x;
+                ends[1]->saved_x = ends[0]->saved_x;
+                ends[1]->y = ends[0]->y;
               }
             }
             if (ev.ch == 'j') {
@@ -272,6 +296,15 @@ int main(int argc, char **argv) {
               }
               // TODO: merge_overlapping_selections()
             }
+            if (ev.ch == 'H') {
+              for (int i = 0; i < buffer.num_sels; i++) {
+                Cursor *cursor = &buffer.sels[i].cursor;
+                if (cursor->x > 0) {
+                  set_cursor_x(cursor, cursor->x - 1);
+                }
+              }
+              // TODO: merge_overlapping_selections()
+            }
             if (ev.ch == 'l') {
               for (int i = 0; i < buffer.num_sels; i++) {
                 Cursor *cursor = &buffer.sels[i].cursor;
@@ -280,6 +313,15 @@ int main(int argc, char **argv) {
                   buffer.sels[i].anchor.x = cursor->x;
                   buffer.sels[i].anchor.saved_x = cursor->saved_x;
                   buffer.sels[i].anchor.y = cursor->y;
+                }
+              }
+              // TODO: merge_overlapping_selections()
+            }
+            if (ev.ch == 'L') {
+              for (int i = 0; i < buffer.num_sels; i++) {
+                Cursor *cursor = &buffer.sels[i].cursor;
+                if (cursor->x < buffer.lines[cursor->y].len) {
+                  set_cursor_x(cursor, cursor->x + 1);
                 }
               }
               // TODO: merge_overlapping_selections()
