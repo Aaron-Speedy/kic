@@ -46,6 +46,11 @@ typedef struct {
   BufferOperation *ops;
   size_t num_ops;
 } OperationList;
+void init_operation_list(OperationList *op_list, BufferOperation op) {
+  op_list->ops = malloc(sizeof(BufferOperation) * 1);
+  op_list->ops[0] = op;
+  op_list->num_ops = 1;
+}
 
 struct tb_event tb_event;
 
@@ -162,7 +167,7 @@ void enter_normal_mode(Buffer *buffer) {
 
 void enter_insert_in_new_line_below(Buffer *buffer) {
   Line new_line = {
-    .content = malloc(1),
+    .content = malloc(sizeof(char) * 1),
     .len = 0,
     .cap = 1,
   };
@@ -293,7 +298,19 @@ void write_buffer_to_file(Buffer *buffer) {
 }
 
 // Does not support unicode
-OperationList mappings_ch[NUM_MODES][94]; // Access with mappings_ch[buffer.mode][ev.ch - ' ']; 
+OperationList mappings_ch[NUM_MODES][94]; // Access with mappings_ch[buffer.mode][ev.ch - ' '] };
+void init_mappings_ch() {
+  init_operation_list(&mappings_ch[MODE_NORMAL]['i' - ' '], enter_insert_mode);
+  init_operation_list(&mappings_ch[MODE_NORMAL]['o' - ' '], enter_insert_in_new_line_below);
+  init_operation_list(&mappings_ch[MODE_NORMAL]['d' - ' '], remove_selected_text);
+  init_operation_list(&mappings_ch[MODE_NORMAL]['j' - ' '], move_cursors_down);
+  init_operation_list(&mappings_ch[MODE_NORMAL]['k' - ' '], move_cursors_up);
+  init_operation_list(&mappings_ch[MODE_NORMAL]['h' - ' '], move_cursors_left);
+  init_operation_list(&mappings_ch[MODE_NORMAL]['H' - ' '], extend_selections_left);
+  init_operation_list(&mappings_ch[MODE_NORMAL]['l' - ' '], move_cursors_right);
+  init_operation_list(&mappings_ch[MODE_NORMAL]['L' - ' '], extend_selections_right);
+}
+
 OperationList mappings_other[NUM_MODES][94]; // Access with mappings_ch[buffer.mode][ev.ch - ' ']; 
 
 int main(int argc, char **argv) {
@@ -302,6 +319,8 @@ int main(int argc, char **argv) {
     printf("Usage: %s [FILE]\n", argv[0]);
     exit(EXIT_FAILURE);
   }
+
+  init_mappings_ch();
 
   Buffer buffer = {
     .lines = malloc(sizeof(Line) * 1),
@@ -365,45 +384,18 @@ int main(int argc, char **argv) {
   while (tb_poll_event(&tb_event) == TB_OK) {
     switch (tb_event.type) {
       case TB_EVENT_KEY: {
-        if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
-          if (mappings_ch[tb_event.ch - ' '] != NULL) {
-            for (int i = 0; i < mappings_ch[tb_event.ch - ' ']->num_ops; i++) {
-              mappings_ch[tb_event.ch - ' ']->ops[i](&buffer);
-            }
-          }
-        }
-
         switch (buffer.mode) {
           case MODE_NORMAL: {
+            if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
+              if (mappings_ch[MODE_NORMAL][tb_event.ch - ' '].num_ops > 0) {
+                for (int i = 0; i < mappings_ch[MODE_NORMAL][tb_event.ch - ' '].num_ops; i++) {
+                  mappings_ch[MODE_NORMAL][tb_event.ch - ' '].ops[i](&buffer);
+                }
+              }
+            }
+
             if (tb_event.key == TB_KEY_CTRL_Q) {
               shutdown(&buffer);
-            }
-            if (tb_event.ch == 'i') {
-              enter_insert_mode(&buffer);
-            }
-            if (tb_event.ch == 'o') {
-              enter_insert_in_new_line_below(&buffer);
-            }
-            if (tb_event.ch == 'd') {
-              remove_selected_text(&buffer);
-            }
-            if (tb_event.ch == 'j') {
-              move_cursors_down(&buffer);
-            }
-            if (tb_event.ch == 'k') {
-              move_cursors_up(&buffer);
-            }
-            if (tb_event.ch == 'h') {
-              move_cursors_left(&buffer);
-            }
-            if (tb_event.ch == 'H') {
-              extend_selections_left(&buffer);
-            }
-            if (tb_event.ch == 'l') {
-              move_cursors_right(&buffer);
-            }
-            if (tb_event.ch == 'L') {
-              extend_selections_right(&buffer);
             }
             if (tb_event.key == TB_KEY_ESC) {
               write_buffer_to_file(&buffer);
@@ -421,6 +413,10 @@ int main(int argc, char **argv) {
               backspace_at_every_cursor(&buffer);
             }
           } break;
+          case NUM_MODES: {
+            tb_shutdown();
+            fprintf(stderr, "Error: Mode cannot be NUM_MODES\n");
+          }
         }
       } break;
     }
@@ -428,7 +424,6 @@ int main(int argc, char **argv) {
   }
 
   shutdown(&buffer);
-  return 0;
 }
 
 // TODO: Support Unicode
