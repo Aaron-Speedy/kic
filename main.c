@@ -40,6 +40,11 @@ typedef struct {
   const char *file_path;
 } Buffer;
 
+typedef void (*BufferOperation)(Buffer *buffer);
+typedef struct {
+  BufferOperation *ops;
+} OperationList;
+
 struct tb_event tb_event;
 
 void get_ordered_cursors(Selection *sel, Cursor **buf) {
@@ -96,15 +101,6 @@ void remove_span(Buffer *buffer, size_t len, size_t x, size_t y) {
   }
   memmove(&buffer->lines[y].content[x], &buffer->lines[y].content[x + len], sizeof(char) * (buffer->lines[y].len - x - len));
   buffer->lines[y].len -= len;
-}
-
-void write_buffer_to_file(Buffer *buffer) {
-  int fd = open(buffer->file_path, O_CREAT | O_WRONLY | O_TRUNC);
-  for (int i = 0; i < buffer->num_lines; i++) {
-    write(fd, buffer->lines[i].content, buffer->lines[i].len);
-    write(fd, "\n", 1);
-  }
-  close(fd);
 }
 
 void draw_terminal(Buffer *buffer) {
@@ -283,6 +279,15 @@ void backspace_at_every_cursor(Buffer *buffer) {
       cursor->x -= 1;
     }
   }
+}
+
+void write_buffer_to_file(Buffer *buffer) {
+  int fd = open(buffer->file_path, O_CREAT | O_WRONLY | O_TRUNC);
+  for (int i = 0; i < buffer->num_lines; i++) {
+    write(fd, buffer->lines[i].content, buffer->lines[i].len);
+    write(fd, "\n", 1);
+  }
+  close(fd);
 }
 
 int main(int argc, char **argv) {
