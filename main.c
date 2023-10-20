@@ -4,6 +4,7 @@
 typedef enum {
   MODE_NORMAL,
   MODE_INSERT,
+  NUM_MODES,
 } Mode;
 
 typedef struct {
@@ -43,6 +44,7 @@ typedef struct {
 typedef void (*BufferOperation)(Buffer *buffer);
 typedef struct {
   BufferOperation *ops;
+  size_t num_ops;
 } OperationList;
 
 struct tb_event tb_event;
@@ -290,6 +292,10 @@ void write_buffer_to_file(Buffer *buffer) {
   close(fd);
 }
 
+// Does not support unicode
+OperationList mappings_ch[NUM_MODES][94]; // Access with mappings_ch[buffer.mode][ev.ch - ' ']; 
+OperationList mappings_other[NUM_MODES][94]; // Access with mappings_ch[buffer.mode][ev.ch - ' ']; 
+
 int main(int argc, char **argv) {
   if (argc > 2 || argc < 2) {
     printf("Invalid parameters\n");
@@ -359,6 +365,14 @@ int main(int argc, char **argv) {
   while (tb_poll_event(&tb_event) == TB_OK) {
     switch (tb_event.type) {
       case TB_EVENT_KEY: {
+        if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
+          if (mappings_ch[tb_event.ch - ' '] != NULL) {
+            for (int i = 0; i < mappings_ch[tb_event.ch - ' ']->num_ops; i++) {
+              mappings_ch[tb_event.ch - ' ']->ops[i](&buffer);
+            }
+          }
+        }
+
         switch (buffer.mode) {
           case MODE_NORMAL: {
             if (tb_event.key == TB_KEY_CTRL_Q) {

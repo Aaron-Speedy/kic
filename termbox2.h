@@ -1488,7 +1488,7 @@ static const char *get_terminfo_string(int16_t str_offsets_pos,
     int16_t str_offsets_len, int16_t str_table_pos, int16_t str_table_len,
     int16_t str_index);
 static int wait_event(struct tb_event *event, int timeout);
-static int extract_event(struct tb_event *event);
+static int extract_event(struct tb_event *event, int rec);
 static int extract_esc(struct tb_event *event);
 static int extract_esc_user(struct tb_event *event, int is_post);
 static int extract_esc_cap(struct tb_event *event);
@@ -2623,7 +2623,7 @@ static int wait_event(struct tb_event *event, int timeout) {
     char buf[TB_OPT_READ_BUF];
 
     memset(event, 0, sizeof(*event));
-    if_ok_return(rv, extract_event(event));
+    if_ok_return(rv, extract_event(event, 0));
 
     fd_set fds;
     struct timeval tv;
@@ -2676,13 +2676,13 @@ static int wait_event(struct tb_event *event, int timeout) {
         }
 
         memset(event, 0, sizeof(*event));
-        if_ok_return(rv, extract_event(event));
+        if_ok_return(rv, extract_event(event, 0));
     } while (timeout == -1);
 
     return rv;
 }
 
-static int extract_event(struct tb_event *event) {
+static int extract_event(struct tb_event *event, int rec) {
     int rv;
     struct bytebuf_t *in = &global.in;
 
@@ -2693,9 +2693,9 @@ static int extract_event(struct tb_event *event) {
     if (in->buf[0] == '\x1b') {
         // Escape sequence?
         // In TB_INPUT_ESC, skip if the buffer is a single escape char
-        if (!((global.input_mode & TB_INPUT_ESC) && in->len == 1)) {
-            if_ok_or_need_more_return(rv, extract_esc(event));
-        }
+        // if (!((global.input_mode & TB_INPUT_ESC) && in->len == 1)) {
+        //     if_ok_or_need_more_return(rv, extract_esc(event));
+        // }
 
         // Escape key?
         if (global.input_mode & TB_INPUT_ESC) {
@@ -2707,10 +2707,19 @@ static int extract_event(struct tb_event *event) {
             return TB_OK;
         }
 
+        if (in->len == 1 && rec == 0) {
+            event->type = TB_EVENT_KEY;
+            event->ch = 0;
+            event->key = TB_KEY_ESC;
+            event->mod = 0;
+            bytebuf_shift(in, 1);
+            return TB_OK;
+        }
+
         // Recurse for alt key
         event->mod |= TB_MOD_ALT;
         bytebuf_shift(in, 1);
-        return extract_event(event);
+        return extract_event(event, 1);
     }
 
     // ASCII control key?
