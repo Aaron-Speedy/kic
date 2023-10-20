@@ -359,7 +359,7 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  tb_set_input_mode(TB_INPUT_ESC | TB_INPUT_MOUSE);
+  tb_set_input_mode(TB_INPUT_ALT | TB_INPUT_MOUSE);
 
   draw_terminal(&buffer);
   while (tb_poll_event(&tb_event) == TB_OK) {
