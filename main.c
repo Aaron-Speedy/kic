@@ -54,7 +54,7 @@ void init_operation_list(OperationList *op_list, int num_ops, ...) {
   va_list args;
   va_start(args, num_ops);
   for (int i = 0; i < num_ops; i++) {
-    op_list->ops[0] = va_arg(args, BufferOperation);
+    op_list->ops[i] = va_arg(args, BufferOperation);
   }
   op_list->num_ops = num_ops;
 
