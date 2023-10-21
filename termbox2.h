@@ -1469,8 +1469,6 @@ static int init_term_attrs(void);
 static int init_term_caps(void);
 static int init_cap_trie(void);
 static int cap_trie_add(const char *cap, uint16_t key, uint8_t mod);
-static int cap_trie_find(const char *buf, size_t nbuf, struct cap_trie_t **last,
-    size_t *depth);
 static int cap_trie_deinit(struct cap_trie_t *node);
 static int init_resize_handler(void);
 static int send_init_escape_codes(void);
@@ -1489,10 +1487,6 @@ static const char *get_terminfo_string(int16_t str_offsets_pos,
     int16_t str_index);
 static int wait_event(struct tb_event *event, int timeout);
 static int extract_event(struct tb_event *event, int rec);
-static int extract_esc(struct tb_event *event);
-static int extract_esc_user(struct tb_event *event, int is_post);
-static int extract_esc_cap(struct tb_event *event);
-static int extract_esc_mouse(struct tb_event *event);
 static int resize_cellbufs(void);
 static void handle_resize(int sig);
 static int send_attr(uintattr_t fg, uintattr_t bg);
@@ -2190,37 +2184,6 @@ static int cap_trie_add(const char *cap, uint16_t key, uint8_t mod) {
     return TB_OK;
 }
 
-static int cap_trie_find(const char *buf, size_t nbuf, struct cap_trie_t **last,
-    size_t *depth) {
-    struct cap_trie_t *next, *node = &global.cap_trie;
-    size_t i, j;
-    *last = node;
-    *depth = 0;
-    for (i = 0; i < nbuf; i++) {
-        char c = buf[i];
-        next = NULL;
-
-        // Find c in node.children
-        for (j = 0; j < node->nchildren; j++) {
-            if (node->children[j].c == c) {
-                next = &node->children[j];
-                break;
-            }
-        }
-        if (!next) {
-            // Not found
-            return TB_OK;
-        }
-        node = next;
-        *last = node;
-        *depth += 1;
-        if (node->is_leaf && node->nchildren < 1) {
-            break;
-        }
-    }
-    return TB_OK;
-}
-
 static int cap_trie_deinit(struct cap_trie_t *node) {
     size_t j;
     for (j = 0; j < node->nchildren; j++) {
@@ -2683,7 +2646,6 @@ static int wait_event(struct tb_event *event, int timeout) {
 }
 
 static int extract_event(struct tb_event *event, int rec) {
-    int rv;
     struct bytebuf_t *in = &global.in;
 
     if (in->len == 0) {
@@ -2744,241 +2706,6 @@ static int extract_event(struct tb_event *event, int rec) {
 
     // Need more input
     return TB_ERR;
-}
-
-static int extract_esc(struct tb_event *event) {
-    int rv;
-    if_ok_or_need_more_return(rv, extract_esc_user(event, 0));
-    if_ok_or_need_more_return(rv, extract_esc_cap(event));
-    if_ok_or_need_more_return(rv, extract_esc_mouse(event));
-    if_ok_or_need_more_return(rv, extract_esc_user(event, 1));
-    return TB_ERR;
-}
-
-static int extract_esc_user(struct tb_event *event, int is_post) {
-    int rv;
-    size_t consumed = 0;
-    struct bytebuf_t *in = &global.in;
-    int (*fn)(struct tb_event *, size_t *);
-
-    fn = is_post ? global.fn_extract_esc_post : global.fn_extract_esc_pre;
-
-    if (!fn) {
-        return TB_ERR;
-    }
-
-    rv = fn(event, &consumed);
-    if (rv == TB_OK) {
-        bytebuf_shift(in, consumed);
-    }
-
-    if_ok_or_need_more_return(rv, rv);
-    return TB_ERR;
-}
-
-static int extract_esc_cap(struct tb_event *event) {
-    int rv;
-    struct bytebuf_t *in = &global.in;
-    struct cap_trie_t *node;
-    size_t depth;
-
-    if_err_return(rv, cap_trie_find(in->buf, in->len, &node, &depth));
-    if (node->is_leaf) {
-        // Found a leaf node
-        event->type = TB_EVENT_KEY;
-        event->ch = 0;
-        event->key = node->key;
-        event->mod = node->mod;
-        bytebuf_shift(in, depth);
-        return TB_OK;
-    } else if (node->nchildren > 0 && in->len <= depth) {
-        // Found a branch node (not enough input)
-        return TB_ERR_NEED_MORE;
-    }
-
-    return TB_ERR;
-}
-
-static int extract_esc_mouse(struct tb_event *event) {
-    struct bytebuf_t *in = &global.in;
-
-    enum type { TYPE_VT200 = 0, TYPE_1006, TYPE_1015, TYPE_MAX };
-
-    char *cmp[TYPE_MAX] = {//
-        // X10 mouse encoding, the simplest one
-        // \x1b [ M Cb Cx Cy
-        [TYPE_VT200] = "\x1b[M",
-        // xterm 1006 extended mode or urxvt 1015 extended mode
-        // xterm: \x1b [ < Cb ; Cx ; Cy (M or m)
-        [TYPE_1006] = "\x1b[<",
-        // urxvt: \x1b [ Cb ; Cx ; Cy M
-        [TYPE_1015] = "\x1b["};
-
-    enum type type = 0;
-    int ret = TB_ERR;
-
-    // Unrolled at compile-time (probably)
-    for (; type < TYPE_MAX; type++) {
-        size_t size = strlen(cmp[type]);
-
-        if (in->len >= size && (strncmp(cmp[type], in->buf, size)) == 0) {
-            break;
-        }
-    }
-
-    if (type == TYPE_MAX) {
-        ret = TB_ERR; // No match
-        return ret;
-    }
-
-    size_t buf_shift = 0;
-
-    switch (type) {
-        case TYPE_VT200:
-            if (in->len >= 6) {
-                int b = in->buf[3] - 0x20;
-                int fail = 0;
-
-                switch (b & 3) {
-                    case 0:
-                        event->key = ((b & 64) != 0) ? TB_KEY_MOUSE_WHEEL_UP
-                                                     : TB_KEY_MOUSE_LEFT;
-                        break;
-                    case 1:
-                        event->key = ((b & 64) != 0) ? TB_KEY_MOUSE_WHEEL_DOWN
-                                                     : TB_KEY_MOUSE_MIDDLE;
-                        break;
-                    case 2:
-                        event->key = TB_KEY_MOUSE_RIGHT;
-                        break;
-                    case 3:
-                        event->key = TB_KEY_MOUSE_RELEASE;
-                        break;
-                    default:
-                        ret = TB_ERR;
-                        fail = 1;
-                        break;
-                }
-
-                if (!fail) {
-                    if ((b & 32) != 0) {
-                        event->mod |= TB_MOD_MOTION;
-                    }
-
-                    // the coord is 1,1 for upper left
-                    event->x = ((uint8_t)in->buf[4]) - 0x21;
-                    event->y = ((uint8_t)in->buf[5]) - 0x21;
-
-                    ret = TB_OK;
-                }
-
-                buf_shift = 6;
-            }
-            break;
-        case TYPE_1006:
-            // fallthrough
-        case TYPE_1015: {
-            size_t index_fail = (size_t)-1;
-
-            enum {
-                FIRST_M = 0,
-                FIRST_SEMICOLON,
-                LAST_SEMICOLON,
-                FIRST_LAST_MAX
-            };
-
-            size_t indices[FIRST_LAST_MAX] = {index_fail, index_fail,
-                index_fail};
-            int m_is_capital = 0;
-
-            for (size_t i = 0; i < in->len; i++) {
-                if (in->buf[i] == ';') {
-                    if (indices[FIRST_SEMICOLON] == index_fail) {
-                        indices[FIRST_SEMICOLON] = i;
-                    } else {
-                        indices[LAST_SEMICOLON] = i;
-                    }
-                } else if (indices[FIRST_M] == index_fail) {
-                    if (in->buf[i] == 'm' || in->buf[i] == 'M') {
-                        m_is_capital = (in->buf[i] == 'M');
-                        indices[FIRST_M] = i;
-                    }
-                }
-            }
-
-            if (indices[FIRST_M] == index_fail ||
-                indices[FIRST_SEMICOLON] == index_fail ||
-                indices[LAST_SEMICOLON] == index_fail)
-            {
-                ret = TB_ERR;
-            } else {
-                int start = (type == TYPE_1015 ? 2 : 3);
-
-                unsigned n1 = strtoul(&in->buf[start], NULL, 10);
-                unsigned n2 =
-                    strtoul(&in->buf[indices[FIRST_SEMICOLON] + 1], NULL, 10);
-                unsigned n3 =
-                    strtoul(&in->buf[indices[LAST_SEMICOLON] + 1], NULL, 10);
-
-                if (type == TYPE_1015) {
-                    n1 -= 0x20;
-                }
-
-                int fail = 0;
-
-                switch (n1 & 3) {
-                    case 0:
-                        event->key = ((n1 & 64) != 0) ? TB_KEY_MOUSE_WHEEL_UP
-                                                      : TB_KEY_MOUSE_LEFT;
-                        break;
-                    case 1:
-                        event->key = ((n1 & 64) != 0) ? TB_KEY_MOUSE_WHEEL_DOWN
-                                                      : TB_KEY_MOUSE_MIDDLE;
-                        break;
-                    case 2:
-                        event->key = TB_KEY_MOUSE_RIGHT;
-                        break;
-                    case 3:
-                        event->key = TB_KEY_MOUSE_RELEASE;
-                        break;
-                    default:
-                        ret = TB_ERR;
-                        fail = 1;
-                        break;
-                }
-
-                buf_shift = in->len;
-
-                if (!fail) {
-                    if (!m_is_capital) {
-                        // on xterm mouse release is signaled by lowercase m
-                        event->key = TB_KEY_MOUSE_RELEASE;
-                    }
-
-                    if ((n1 & 32) != 0) {
-                        event->mod |= TB_MOD_MOTION;
-                    }
-
-                    event->x = ((uint8_t)n2) - 1;
-                    event->y = ((uint8_t)n3) - 1;
-
-                    ret = TB_OK;
-                }
-            }
-        } break;
-        case TYPE_MAX:
-            ret = TB_ERR;
-    }
-
-    if (buf_shift > 0) {
-        bytebuf_shift(in, buf_shift);
-    }
-
-    if (ret == TB_OK) {
-        event->type = TB_EVENT_MOUSE;
-    }
-
-    return ret;
 }
 
 static int resize_cellbufs(void) {
