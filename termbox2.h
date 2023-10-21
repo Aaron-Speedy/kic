@@ -2702,7 +2702,7 @@ static int extract_event(struct tb_event *event, int rec) {
             event->type = TB_EVENT_KEY;
             event->ch = 0;
             event->key = TB_KEY_ESC;
-            event->mod = 0;
+            event->mod = TB_MOD_CTRL; // To be able to map to ctrl + {
             bytebuf_shift(in, 1);
             return TB_OK;
         }
@@ -2711,7 +2711,7 @@ static int extract_event(struct tb_event *event, int rec) {
             event->type = TB_EVENT_KEY;
             event->ch = 0;
             event->key = TB_KEY_ESC;
-            event->mod = 0;
+            event->mod = TB_MOD_CTRL;
             bytebuf_shift(in, 1);
             return TB_OK;
         }

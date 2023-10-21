@@ -251,9 +251,6 @@ void extend_selections_right(Buffer *buffer) {
     Cursor *cursor = &buffer->sels[i].cursor;
     if (cursor->x < buffer->lines[cursor->y].len) {
       set_cursor_x(cursor, cursor->x + 1);
-      buffer->sels[i].anchor.x = cursor->x;
-      buffer->sels[i].anchor.saved_x = cursor->saved_x;
-      buffer->sels[i].anchor.y = cursor->y;
     }
   }
   // TODO: merge_overlapping_selections()
@@ -298,29 +295,33 @@ void write_buffer_to_file(Buffer *buffer) {
 }
 
 // Does not support unicode
-OperationList mappings_ch[NUM_MODES][94]; // Access with mappings_ch[buffer.mode][ev.ch - ' '] };
-void init_mappings_ch() {
-  init_operation_list(&mappings_ch[MODE_NORMAL]['i' - ' '], enter_insert_mode);
-  init_operation_list(&mappings_ch[MODE_NORMAL]['o' - ' '], enter_insert_in_new_line_below);
-  init_operation_list(&mappings_ch[MODE_NORMAL]['d' - ' '], remove_selected_text);
-  init_operation_list(&mappings_ch[MODE_NORMAL]['j' - ' '], move_cursors_down);
-  init_operation_list(&mappings_ch[MODE_NORMAL]['k' - ' '], move_cursors_up);
-  init_operation_list(&mappings_ch[MODE_NORMAL]['h' - ' '], move_cursors_left);
-  init_operation_list(&mappings_ch[MODE_NORMAL]['H' - ' '], extend_selections_left);
-  init_operation_list(&mappings_ch[MODE_NORMAL]['l' - ' '], move_cursors_right);
-  init_operation_list(&mappings_ch[MODE_NORMAL]['L' - ' '], extend_selections_right);
-}
-
-OperationList mappings_other[NUM_MODES][94]; // Access with mappings_ch[buffer.mode][ev.ch - ' ']; 
+OperationList mappings_ch[NUM_MODES][TB_MOD_ALT + TB_MOD_CTRL + 1][95];
+OperationList mappings_backspace[NUM_MODES];
 
 int main(int argc, char **argv) {
+  for (int i = ' '; i <= '~'; i++) {
+    init_operation_list(&mappings_ch[MODE_INSERT][0][i - ' '], insert_at_every_cursor);
+  }
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['i' - ' '], enter_insert_mode);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['o' - ' '], enter_insert_in_new_line_below);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['d' - ' '], remove_selected_text);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['j' - ' '], move_cursors_down);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['k' - ' '], move_cursors_up);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['h' - ' '], move_cursors_left);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['H' - ' '], extend_selections_left);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['l' - ' '], move_cursors_right);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['L' - ' '], extend_selections_right);
+  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], shutdown);
+  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], shutdown);
+  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], write_buffer_to_file); // Escape
+  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], enter_normal_mode); // Escape
+  init_operation_list(&mappings_backspace[MODE_INSERT], backspace_at_every_cursor);
+
   if (argc > 2 || argc < 2) {
     printf("Invalid parameters\n");
     printf("Usage: %s [FILE]\n", argv[0]);
     exit(EXIT_FAILURE);
   }
-
-  init_mappings_ch();
 
   Buffer buffer = {
     .lines = malloc(sizeof(Line) * 1),
@@ -384,38 +385,28 @@ int main(int argc, char **argv) {
   while (tb_poll_event(&tb_event) == TB_OK) {
     switch (tb_event.type) {
       case TB_EVENT_KEY: {
-        switch (buffer.mode) {
-          case MODE_NORMAL: {
-            if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
-              if (mappings_ch[MODE_NORMAL][tb_event.ch - ' '].num_ops > 0) {
-                for (int i = 0; i < mappings_ch[MODE_NORMAL][tb_event.ch - ' '].num_ops; i++) {
-                  mappings_ch[MODE_NORMAL][tb_event.ch - ' '].ops[i](&buffer);
-                }
-              }
+        if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
+          OperationList *op_list = &mappings_ch[buffer.mode][tb_event.mod][tb_event.ch - ' '];
+          if (op_list->num_ops > 0) {
+            for (int i = 0; i < op_list->num_ops; i++) {
+              op_list->ops[i](&buffer);
             }
-
-            if (tb_event.key == TB_KEY_CTRL_Q) {
-              shutdown(&buffer);
+          }
+        }
+        else if (tb_event.key >= TB_KEY_CTRL_A && tb_event.key <= TB_KEY_SPACE) {
+          OperationList *op_list = &mappings_ch[buffer.mode][tb_event.mod][tb_event.key + 'A' - 1];
+          if (op_list->num_ops > 0) {
+            for (int i = 0; i < op_list->num_ops; i++) {
+              op_list->ops[i](&buffer);
             }
-            if (tb_event.key == TB_KEY_ESC) {
-              write_buffer_to_file(&buffer);
+          }
+        }
+        else if (tb_event.key == TB_KEY_BACKSPACE2) {
+          OperationList *op_list = &mappings_backspace[buffer.mode];
+          if (op_list->num_ops > 0) {
+            for (int i = 0; i < op_list->num_ops; i++) {
+              op_list->ops[i](&buffer);
             }
-          } break;
-
-          case MODE_INSERT: {
-            if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
-              insert_at_every_cursor(&buffer);
-            }
-            if (tb_event.key == TB_KEY_ESC) {
-              enter_normal_mode(&buffer);
-            }
-            if (tb_event.key == TB_KEY_CTRL_8) { // Backspace 
-              backspace_at_every_cursor(&buffer);
-            }
-          } break;
-          case NUM_MODES: {
-            tb_shutdown();
-            fprintf(stderr, "Error: Mode cannot be NUM_MODES\n");
           }
         }
       } break;
@@ -427,3 +418,5 @@ int main(int argc, char **argv) {
 }
 
 // TODO: Support Unicode
+// TODO: Make mappings contiguous in memory
+// TODO: Improve input handling in termbox2.h
