@@ -1807,14 +1807,14 @@ int tb_print_len(int x, int y, uintattr_t fg, uintattr_t bg, const char *str, si
 int tb_print_ex_len(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
     const char *str, size_t len) {
     int rv;
-    uint32_t uni;
+    uint32_t uni = 0;
     int w, ix = x;
     if (out_w) {
         *out_w = 0;
     }
     for (int i = 0; i < len; ) {
-      i += tb_utf8_char_to_unicode(&uni, &str[i]);
-      w = wcwidth((wchar_t)uni);
+        i += tb_utf8_char_to_unicode(&uni, &str[i]);
+        w = wcwidth((wchar_t)uni);
         if (w < 0) {
             w = 1;
         }
