@@ -44,12 +44,28 @@ typedef struct {
 } Buffer;
 
 typedef void (*BufferOperation)(Buffer *buffer);
+
 typedef struct {
   BufferOperation *ops;
   size_t num_ops;
 } OperationList;
+
+BufferOperation *buf_op_arena;
+size_t num_buf_ops = 0;
+size_t cap_buf_ops = 1000;
+
 void init_operation_list(OperationList *op_list, int num_ops, ...) {
-  op_list->ops = malloc(sizeof(BufferOperation) * num_ops);
+  if (num_buf_ops > cap_buf_ops) {
+    cap_buf_ops *= 2;
+    BufferOperation *new_arena = realloc(buf_op_arena, sizeof(BufferOperation) * cap_buf_ops);
+    if (new_arena == NULL) {
+      perror("Could not realloc buf_op_arena for appending");
+      exit(EXIT_FAILURE);
+    }
+    buf_op_arena = new_arena;
+  }
+  num_buf_ops += 1;
+  op_list->ops = &buf_op_arena[num_buf_ops - 1];
 
   va_list args;
   va_start(args, num_ops);
@@ -324,6 +340,8 @@ OperationList mappings_ch[NUM_MODES][TB_MOD_ALT + TB_MOD_CTRL + 1][95];
 OperationList mappings_backspace[NUM_MODES];
 
 int main(int argc, char **argv) {
+  buf_op_arena = malloc(sizeof(BufferOperation) * cap_buf_ops);
+
   for (int i = ' '; i <= '~'; i++) {
     init_operation_list(&mappings_ch[MODE_INSERT][0][i - ' '], 1, insert_at_every_cursor);
   }
@@ -447,3 +465,4 @@ int main(int argc, char **argv) {
 // TODO: Make mappings contiguous in memory
 // TODO: Improve input handling in termbox2.h
 // TODO: Fix program closing when window resizes
+// TODO: Support Kitty's input protocol
