@@ -290,9 +290,13 @@ void insert_at_every_cursor(Buffer *buffer) {
 void backspace_at_every_cursor(Buffer *buffer) {
   for (int i = 0; i < buffer->num_sels; i++) {
     Cursor *cursor = &buffer->sels[i].cursor;
+    Cursor *anchor = &buffer->sels[i].anchor;
     if (cursor->x > 0) {
       remove_span(buffer, 1, cursor->x - 1, cursor->y);
       cursor->x -= 1;
+      cursor->saved_x = cursor->x;
+      anchor->x -= 1;
+      anchor->saved_x = anchor->x;
     }
   }
 }
