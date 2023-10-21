@@ -158,6 +158,18 @@ void shutdown(Buffer *buffer) {
 }
 
 void enter_insert_mode(Buffer *buffer) {
+  for (int i = 0; i < buffer->num_sels; i++) {
+    Cursor *ends[2] = { 0 };
+    get_ordered_cursors(&buffer->sels[i], ends);
+
+    size_t x = ends[1]->x, saved_x = ends[1]->x, y = ends[1]->y;
+    buffer->sels[i].cursor.x = ends[0]->x;
+    buffer->sels[i].cursor.saved_x = ends[0]->saved_x;
+    buffer->sels[i].cursor.y = ends[0]->y;
+    buffer->sels[i].anchor.x = x;
+    buffer->sels[i].anchor.saved_x = saved_x;
+    buffer->sels[i].anchor.y = y;
+  }
   buffer->mode = MODE_INSERT;
 }
 
@@ -173,7 +185,7 @@ void enter_insert_in_new_line_below(Buffer *buffer) {
   };
   for (int i = 0; i < buffer->num_sels; i++) {
     insert_line(buffer, &new_line, buffer->sels[i].cursor.y + 1);
-    buffer->sels[i].cursor.saved_x  = 0;
+    buffer->sels[i].cursor.saved_x = 0;
     buffer->sels[i].cursor.x = 0;
     buffer->sels[i].cursor.y += 1;
   }
@@ -420,3 +432,4 @@ int main(int argc, char **argv) {
 // TODO: Support Unicode
 // TODO: Make mappings contiguous in memory
 // TODO: Improve input handling in termbox2.h
+
