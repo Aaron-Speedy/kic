@@ -182,6 +182,14 @@ void shutdown(Buffer *buffer) {
   exit(EXIT_SUCCESS);
 }
 
+void reduce_selections_to_cursor(Buffer *buffer) {
+  for (int i = 0; i < buffer->num_sels; i++) {
+    buffer->sels[i].anchor.x = buffer->sels[i].cursor.x;
+    buffer->sels[i].anchor.saved_x = buffer->sels[i].cursor.saved_x;
+    buffer->sels[i].anchor.y = buffer->sels[i].cursor.y;
+  }
+}
+
 void enter_insert_mode(Buffer *buffer) {
   for (int i = 0; i < buffer->num_sels; i++) {
     Cursor *ends[2] = { 0 };
@@ -214,6 +222,7 @@ void enter_insert_in_new_line_below(Buffer *buffer) {
     buffer->sels[i].cursor.x = 0;
     buffer->sels[i].cursor.y += 1;
   }
+  reduce_selections_to_cursor(buffer);
   buffer->mode = MODE_INSERT;
 }
 
@@ -263,14 +272,6 @@ void move_cursors_up(Buffer *buffer) {
     }
   }
   // TODO: merge_overlapping_selections()
-}
-
-void reduce_selections_to_cursor(Buffer *buffer) {
-  for (int i = 0; i < buffer->num_sels; i++) {
-    buffer->sels[i].anchor.x = buffer->sels[i].cursor.x;
-    buffer->sels[i].anchor.saved_x = buffer->sels[i].cursor.saved_x;
-    buffer->sels[i].anchor.y = buffer->sels[i].cursor.y;
-  }
 }
 
 void extend_selections_left(Buffer *buffer) {
