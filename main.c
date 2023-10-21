@@ -1,3 +1,5 @@
+#include <stdarg.h>
+
 #define TB_IMPL
 #include "termbox2.h"
 
@@ -46,10 +48,17 @@ typedef struct {
   BufferOperation *ops;
   size_t num_ops;
 } OperationList;
-void init_operation_list(OperationList *op_list, BufferOperation op) {
-  op_list->ops = malloc(sizeof(BufferOperation) * 1);
-  op_list->ops[0] = op;
-  op_list->num_ops = 1;
+void init_operation_list(OperationList *op_list, int num_ops, ...) {
+  op_list->ops = malloc(sizeof(BufferOperation) * num_ops);
+
+  va_list args;
+  va_start(args, num_ops);
+  for (int i = 0; i < num_ops; i++) {
+    op_list->ops[0] = va_arg(args, BufferOperation);
+  }
+  op_list->num_ops = num_ops;
+
+  va_end(args);
 }
 
 struct tb_event tb_event;
@@ -316,22 +325,22 @@ OperationList mappings_backspace[NUM_MODES];
 
 int main(int argc, char **argv) {
   for (int i = ' '; i <= '~'; i++) {
-    init_operation_list(&mappings_ch[MODE_INSERT][0][i - ' '], insert_at_every_cursor);
+    init_operation_list(&mappings_ch[MODE_INSERT][0][i - ' '], 1, insert_at_every_cursor);
   }
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['i' - ' '], enter_insert_mode);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['o' - ' '], enter_insert_in_new_line_below);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['d' - ' '], remove_selected_text);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['j' - ' '], move_cursors_down);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['k' - ' '], move_cursors_up);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['h' - ' '], move_cursors_left);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['H' - ' '], extend_selections_left);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['l' - ' '], move_cursors_right);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['L' - ' '], extend_selections_right);
-  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], shutdown);
-  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], shutdown);
-  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], write_buffer_to_file); // Escape
-  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], enter_normal_mode); // Escape
-  init_operation_list(&mappings_backspace[MODE_INSERT], backspace_at_every_cursor);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['i' - ' '], 1, enter_insert_mode);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['o' - ' '], 1, enter_insert_in_new_line_below);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['d' - ' '], 1, remove_selected_text);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['j' - ' '], 1, move_cursors_down);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['k' - ' '], 1, move_cursors_up);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['h' - ' '], 1, move_cursors_left);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['H' - ' '], 1, extend_selections_left);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['l' - ' '], 1, move_cursors_right);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['L' - ' '], 1, extend_selections_right);
+  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], 1, shutdown);
+  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], 1, shutdown);
+  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], 1, write_buffer_to_file); // Escape
+  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
+  init_operation_list(&mappings_backspace[MODE_INSERT], 1, backspace_at_every_cursor);
 
   if (argc > 2 || argc < 2) {
     printf("Invalid parameters\n");
@@ -436,4 +445,4 @@ int main(int argc, char **argv) {
 // TODO: Support Unicode
 // TODO: Make mappings contiguous in memory
 // TODO: Improve input handling in termbox2.h
-
+// TODO: Fix program closing when window resizes
