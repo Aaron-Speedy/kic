@@ -345,6 +345,16 @@ void backspace_at_every_cursor(Buffer *buffer) {
       anchor->x -= 1;
       anchor->saved_x = anchor->x;
     }
+    else if (cursor->y > 0) {
+      size_t saved_len = buffer->lines[buffer->sels[i].cursor.y - 1].len;
+      remove_span(buffer, 1, saved_len, buffer->sels[i].cursor.y - 1);
+      buffer->sels[i].cursor.y -= 1;
+      buffer->sels[i].anchor.y -= 1;
+      buffer->sels[i].cursor.x = saved_len;
+      buffer->sels[i].cursor.saved_x = saved_len;
+      buffer->sels[i].anchor.x = saved_len;
+      buffer->sels[i].anchor.saved_x = saved_len;
+    }
   }
 }
 
