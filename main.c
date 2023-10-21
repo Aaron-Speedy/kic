@@ -313,6 +313,27 @@ void insert_at_every_cursor(Buffer *buffer) {
   }
 }
 
+void insert_backslash_n(Buffer *buffer) {
+  for (int i = 0; i < buffer->num_sels; i++) {
+    Cursor *cursor = &buffer->sels[i].cursor;
+    Line line = {
+      .content = malloc(sizeof(char) * cursor->x),
+      .len = cursor->x,
+      .cap = cursor->x,
+    };
+    memcpy(line.content, buffer->lines[cursor->y].content, cursor->x);
+    remove_span(buffer, cursor->x, 0, cursor->y);
+    insert_line(buffer, &line, cursor->y);
+
+    cursor->x = 0;
+    cursor->saved_x = 0;
+    cursor->y += 1;
+    buffer->sels[i].anchor.x = 0;
+    buffer->sels[i].anchor.saved_x = 0;
+    buffer->sels[i].anchor.y += 1;
+  }
+}
+
 void backspace_at_every_cursor(Buffer *buffer) {
   for (int i = 0; i < buffer->num_sels; i++) {
     Cursor *cursor = &buffer->sels[i].cursor;
@@ -360,6 +381,8 @@ int main(int argc, char **argv) {
   init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], 1, shutdown);
   init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], 1, write_buffer_to_file); // Escape
   init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
+  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
+  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['m' - ' '], 1, insert_backslash_n); // Enter
   init_operation_list(&mappings_backspace[MODE_INSERT], 1, backspace_at_every_cursor);
 
   if (argc > 2 || argc < 2) {
@@ -415,7 +438,6 @@ int main(int argc, char **argv) {
       insert_line(&buffer, &line, current_y);
     }
     fclose(file);
-
   }
 
   int tb_init_ret = tb_init();
