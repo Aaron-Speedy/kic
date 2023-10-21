@@ -330,6 +330,7 @@ int main(int argc, char **argv) {
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['i' - ' '], 1, enter_insert_mode);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['o' - ' '], 1, enter_insert_in_new_line_below);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['d' - ' '], 1, remove_selected_text);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['c' - ' '], 2, remove_selected_text, enter_insert_mode);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['j' - ' '], 1, move_cursors_down);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['k' - ' '], 1, move_cursors_up);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['h' - ' '], 1, move_cursors_left);
