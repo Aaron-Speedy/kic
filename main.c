@@ -325,12 +325,10 @@ void insert_backslash_n(Buffer *buffer) {
     remove_span(buffer, cursor->x, 0, cursor->y);
     insert_line(buffer, &line, cursor->y);
 
-    cursor->x = 0;
-    cursor->saved_x = 0;
-    cursor->y += 1;
-    buffer->sels[i].anchor.x = 0;
-    buffer->sels[i].anchor.saved_x = 0;
+    set_cursor_x(cursor, 0);
+    set_cursor_x(&buffer->sels[i].anchor, 0);
     buffer->sels[i].anchor.y += 1;
+    cursor->y += 1;
   }
 }
 
@@ -355,6 +353,15 @@ void backspace_at_every_cursor(Buffer *buffer) {
       buffer->sels[i].anchor.x = saved_len;
       buffer->sels[i].anchor.saved_x = saved_len;
     }
+  }
+}
+
+void select_current_line(Buffer *buffer) {
+  for (int i = 0; i < buffer->num_sels; i++) {
+    Cursor *ends[2];
+    get_ordered_cursors(&buffer->sels[i], ends);
+    set_cursor_x(ends[0], 0);
+    set_cursor_x(ends[1], buffer->lines[ends[1]->y].len);
   }
 }
 
@@ -387,6 +394,7 @@ int main(int argc, char **argv) {
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['H' - ' '], 1, extend_selections_left);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['l' - ' '], 1, move_cursors_right);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['L' - ' '], 1, extend_selections_right);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['x' - ' '], 1, select_current_line);
   init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], 1, shutdown);
   init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], 1, shutdown);
   init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], 1, write_buffer_to_file); // Escape
@@ -499,3 +507,4 @@ int main(int argc, char **argv) {
 // TODO: Improve input handling in termbox2.h
 // TODO: Fix program closing when window resizes
 // TODO: Support Kitty's input protocol
+// TODO: Make moving back or forth past line edges go to next/previous lines
