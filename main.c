@@ -1,11 +1,11 @@
 #include <stdarg.h>
-
 #define TB_IMPL
 #include "termbox2.h"
 
 typedef enum {
   MODE_NORMAL,
   MODE_INSERT,
+  MODE_GOTO,
   NUM_MODES,
 } Mode;
 
@@ -37,6 +37,8 @@ typedef struct {
   size_t num_sels;
   size_t cap_sels;
   size_t primary_sel;
+
+  size_t num_arg;
 
   Mode mode;
 
@@ -190,6 +192,16 @@ void reduce_selections_to_cursor(Buffer *buffer) {
   }
 }
 
+void reduce_selections_to_primary(Buffer *buffer) {
+  buffer->num_sels = 1;
+  buffer->sels[0].cursor.x = buffer->sels[buffer->primary_sel].cursor.x;
+  buffer->sels[0].cursor.saved_x = buffer->sels[buffer->primary_sel].cursor.saved_x;
+  buffer->sels[0].cursor.y = buffer->sels[buffer->primary_sel].cursor.y;
+  buffer->sels[0].anchor.x = buffer->sels[buffer->primary_sel].anchor.x;
+  buffer->sels[0].anchor.saved_x = buffer->sels[buffer->primary_sel].anchor.saved_x;
+  buffer->sels[0].anchor.y = buffer->sels[buffer->primary_sel].anchor.y;
+}
+
 void enter_insert_mode(Buffer *buffer) {
   for (int i = 0; i < buffer->num_sels; i++) {
     Cursor *ends[2] = { 0 };
@@ -207,6 +219,41 @@ void enter_insert_mode(Buffer *buffer) {
 }
 
 void enter_normal_mode(Buffer *buffer) {
+  buffer->mode = MODE_NORMAL;
+}
+
+void enter_goto_mode_or_goto_line(Buffer *buffer) {
+  if (buffer->num_arg > 0) {
+    if (buffer->num_arg + 1 >= buffer->num_lines) {
+      buffer->num_arg = buffer->num_lines;
+    }
+    reduce_selections_to_primary(buffer);
+    set_cursor_x(&buffer->sels[0].cursor, 0);
+    set_cursor_x(&buffer->sels[0].anchor, 0);
+    buffer->sels[0].cursor.y = buffer->num_arg - 1;
+    buffer->sels[0].anchor.y = buffer->num_arg - 1;
+
+    if (buffer->num_arg > tb_height()) {
+      buffer->view_top = buffer->num_arg - tb_height();
+    }
+    else {
+      buffer->view_top = 0;
+    }
+  }
+  else {
+    buffer->mode = MODE_GOTO;
+  }
+}
+
+void goto_file_end(Buffer *buffer) {
+  buffer->num_arg = buffer->num_lines;
+  enter_goto_mode_or_goto_line(buffer);
+  buffer->mode = MODE_NORMAL;
+}
+
+void goto_file_start(Buffer *buffer) {
+  buffer->num_arg = 1;
+  enter_goto_mode_or_goto_line(buffer);
   buffer->mode = MODE_NORMAL;
 }
 
@@ -385,6 +432,7 @@ int main(int argc, char **argv) {
     init_operation_list(&mappings_ch[MODE_INSERT][0][i - ' '], 1, insert_at_every_cursor);
   }
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['i' - ' '], 1, enter_insert_mode);
+  init_operation_list(&mappings_ch[MODE_NORMAL][0]['g' - ' '], 1, enter_goto_mode_or_goto_line);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['o' - ' '], 1, enter_insert_in_new_line_below);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['d' - ' '], 1, remove_selected_text);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['c' - ' '], 2, remove_selected_text, enter_insert_mode);
@@ -396,12 +444,13 @@ int main(int argc, char **argv) {
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['L' - ' '], 1, extend_selections_right);
   init_operation_list(&mappings_ch[MODE_NORMAL][0]['x' - ' '], 1, select_current_line);
   init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], 1, shutdown);
-  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], 1, shutdown);
   init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], 1, write_buffer_to_file); // Escape
   init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
   init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
   init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['m' - ' '], 1, insert_backslash_n); // Enter
   init_operation_list(&mappings_backspace[MODE_INSERT], 1, backspace_at_every_cursor);
+  init_operation_list(&mappings_ch[MODE_GOTO][0]['e' - ' '], 1, goto_file_end);
+  init_operation_list(&mappings_ch[MODE_GOTO][0]['g' - ' '], 1, goto_file_start);
 
   if (argc > 2 || argc < 2) {
     printf("Invalid parameters\n");
@@ -470,13 +519,18 @@ int main(int argc, char **argv) {
   while (tb_poll_event(&tb_event) == TB_OK) {
     switch (tb_event.type) {
       case TB_EVENT_KEY: {
-        if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
+        if (tb_event.ch >= '0' && tb_event.ch <= '9' && buffer.mode == MODE_NORMAL) {
+          buffer.num_arg *= 10;
+          buffer.num_arg += tb_event.ch - '0';
+        }
+        else if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
           OperationList *op_list = &mappings_ch[buffer.mode][tb_event.mod][tb_event.ch - ' '];
           if (op_list->num_ops > 0) {
             for (int i = 0; i < op_list->num_ops; i++) {
               op_list->ops[i](&buffer);
             }
           }
+          buffer.num_arg = 0;
         }
         else if (tb_event.key >= TB_KEY_CTRL_A && tb_event.key <= TB_KEY_SPACE) {
           OperationList *op_list = &mappings_ch[buffer.mode][tb_event.mod][tb_event.key + 'A' - 1];
@@ -485,6 +539,7 @@ int main(int argc, char **argv) {
               op_list->ops[i](&buffer);
             }
           }
+          buffer.num_arg = 0;
         }
         else if (tb_event.key == TB_KEY_BACKSPACE2) {
           OperationList *op_list = &mappings_backspace[buffer.mode];
@@ -493,6 +548,7 @@ int main(int argc, char **argv) {
               op_list->ops[i](&buffer);
             }
           }
+          buffer.num_arg = 0;
         }
       } break;
     }
