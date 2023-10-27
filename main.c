@@ -430,17 +430,7 @@ void backslash_n() {
     } break;
 
     case MENU_EDIT_MODE: {
-      switch (menu_mode) {
-        case COMMAND_MENU_MODE: {
-          // TODO
-        } break;
-        case SEARCH_MENU_MODE: {
-          // TODO
-        } break;
-      }
-
-      edit_mode = FILE_EDIT_MODE;
-      buffer = file_buffer_global;
+      process_menu_input();
     } break;
   }
 }
@@ -516,7 +506,7 @@ int main(int argc, char **argv) {
   init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
   init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
   init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['m' - ' '], 1, backslash_n); // Enter
-  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['m' - ' '], 1, process_menu_input); // Enter
+  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['m' - ' '], 1, process_menu_input); // Enter
   init_operation_list(&mappings_backspace[MODE_INSERT], 1, backspace_at_every_cursor);
   init_operation_list(&mappings_ch[MODE_GOTO][0]['e' - ' '], 1, goto_file_end);
   init_operation_list(&mappings_ch[MODE_GOTO][0]['g' - ' '], 1, goto_file_start);
