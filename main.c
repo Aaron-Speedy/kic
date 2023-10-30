@@ -45,54 +45,91 @@ typedef struct {
   const char *file_path;
 } Buffer;
 
-typedef void (*BufferOperation)();
+typedef void (*Operation)();
 
 typedef struct {
-  BufferOperation *ops;
+  Operation *ops;
   size_t num_ops;
 } OperationList;
 
-BufferOperation *buf_op_arena;
-size_t num_buf_ops = 0;
-size_t cap_buf_ops = 1000;
-
-struct tb_event tb_event;
-
-enum {
-  FILE_EDIT_MODE,
-  MENU_EDIT_MODE,
-} edit_mode = FILE_EDIT_MODE;
-enum {
-  COMMAND_MENU_MODE,
-  SEARCH_MENU_MODE,
-} menu_mode = 0;
+typedef struct {
+  char *name;
+  size_t len_name;
+  OperationList op_list;
+} Command;
 
 Buffer *buffer;
 Buffer *file_buffer_global;
 Buffer *menu_buffer_global;
 
-void init_operation_list(OperationList *op_list, int num_ops, ...) {
-  if (num_buf_ops > cap_buf_ops) {
-    cap_buf_ops *= 2;
-    BufferOperation *new_arena = realloc(buf_op_arena, sizeof(BufferOperation) * cap_buf_ops);
+Command *cmd_list;
+size_t num_cmds = 0;
+size_t cap_cmds = 1000;
+
+Operation *op_arena;
+size_t op_arena_len = 0;
+size_t op_arena_cap = 1000;
+
+enum {
+  FILE_EDIT_MODE,
+  MENU_EDIT_MODE,
+} edit_mode = FILE_EDIT_MODE;
+
+enum {
+  COMMAND_MENU_MODE,
+  SEARCH_MENU_MODE,
+} menu_mode = 0;
+
+struct tb_event tb_event;
+
+void v_init_op_list(OperationList *op_list, size_t num_ops, va_list ops) {
+  if (op_arena_len > op_arena_cap) {
+    op_arena_cap *= 2;
+    Operation *new_arena = realloc(op_arena, sizeof(Operation) * op_arena_cap);
     if (new_arena == NULL) {
-      perror("Could not realloc buf_op_arena for appending");
+      perror("Could not realloc op_arena for appending");
       exit(EXIT_FAILURE);
     }
-    buf_op_arena = new_arena;
+    op_arena = new_arena;
   }
-  num_buf_ops += 1;
-  op_list->ops = &buf_op_arena[num_buf_ops - 1];
+  op_arena_len += 1;
 
-  va_list args;
-  va_start(args, num_ops);
+  op_list->ops = &op_arena[op_arena_len - 1];
   for (int i = 0; i < num_ops; i++) {
-    op_list->ops[i] = va_arg(args, BufferOperation);
+    op_list->ops[i] = va_arg(ops, Operation);
   }
   op_list->num_ops = num_ops;
-
-  va_end(args);
 }
+
+void init_op_list(OperationList *op_list, size_t num_ops, ...) {
+  va_list ops;
+  va_start(ops, num_ops);
+  v_init_op_list(op_list, num_ops, ops);
+  va_end(ops);
+}
+
+#define szstr(str) str, sizeof(str) - 1
+void push_command(char *name, size_t len_name, size_t num_ops, ...) {
+  if (num_cmds > cap_cmds) {
+    cap_cmds *= 2;
+    Command *new_cmd_list = realloc(cmd_list, sizeof(Command) * cap_cmds);
+    if (new_cmd_list == NULL) {
+      perror("Could not realloc cmd_list for appending");
+      exit(EXIT_FAILURE);
+    }
+    cmd_list = new_cmd_list;
+  }
+  num_cmds += 1;
+
+  va_list ops;
+  va_start(ops, num_ops);
+  v_init_op_list(&cmd_list[num_cmds - 1].op_list, num_ops, ops);
+  va_end(ops);
+  cmd_list[num_cmds - 1].name = name;
+  cmd_list[num_cmds - 1].len_name = len_name;
+}
+
+// TODO: pop_command
 
 void get_ordered_cursors(Selection *sel, Cursor **buf) {
   if (sel->anchor.y < sel->cursor.y) { buf[0] = &sel->anchor; buf[1] = &sel->cursor; return; };
@@ -252,7 +289,15 @@ void enter_search_mode() {
 void process_menu_input() {
   switch (menu_mode) {
     case COMMAND_MENU_MODE: {
-      // TODO
+      int found = 0;
+      for (int i = num_cmds - 1; i >= 0 && !found; i--) {
+        if (!strncmp(menu_buffer_global->lines[0].content, cmd_list[i].name, cmd_list[i].len_name)) {
+          found = 1;
+          for (int j = 0; j < cmd_list[i].op_list.num_ops; j++) {
+            cmd_list[i].op_list.ops[j]();
+          }
+        }
+      }
     } break;
     case SEARCH_MENU_MODE: {
       // TODO
@@ -482,34 +527,37 @@ OperationList mappings_ch[NUM_MODES][TB_MOD_ALT + TB_MOD_CTRL + 1][95];
 OperationList mappings_backspace[NUM_MODES];
 
 int main(int argc, char **argv) {
-  buf_op_arena = malloc(sizeof(BufferOperation) * cap_buf_ops);
+  op_arena = malloc(sizeof(Operation) * op_arena_cap);
+  cmd_list = malloc(sizeof(Command) * cap_cmds);
 
   for (int i = ' '; i <= '~'; i++) {
-    init_operation_list(&mappings_ch[MODE_INSERT][0][i - ' '], 1, insert_at_every_cursor);
+    init_op_list(&mappings_ch[MODE_INSERT][0][i - ' '], 1, insert_at_every_cursor);
   }
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['i' - ' '], 1, enter_insert_mode);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['g' - ' '], 1, enter_goto_mode_or_goto_line);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0][':' - ' '], 1, enter_command_mode);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['/' - ' '], 1, enter_search_mode);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['o' - ' '], 1, enter_insert_in_new_line_below);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['d' - ' '], 1, remove_selected_text);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['c' - ' '], 2, remove_selected_text, enter_insert_mode);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['j' - ' '], 1, move_cursors_down);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['k' - ' '], 1, move_cursors_up);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['h' - ' '], 1, move_cursors_left);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['H' - ' '], 1, extend_selections_left);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['l' - ' '], 1, move_cursors_right);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['L' - ' '], 1, extend_selections_right);
-  init_operation_list(&mappings_ch[MODE_NORMAL][0]['x' - ' '], 1, select_current_line);
-  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['q' - ' '], 1, shutdown);
-  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], 1, write_buffer_to_file); // Escape
-  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
-  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
-  init_operation_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['m' - ' '], 1, backslash_n); // Enter
-  init_operation_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['m' - ' '], 1, process_menu_input); // Enter
-  init_operation_list(&mappings_backspace[MODE_INSERT], 1, backspace_at_every_cursor);
-  init_operation_list(&mappings_ch[MODE_GOTO][0]['e' - ' '], 1, goto_file_end);
-  init_operation_list(&mappings_ch[MODE_GOTO][0]['g' - ' '], 1, goto_file_start);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['i' - ' '], 1, enter_insert_mode);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['g' - ' '], 1, enter_goto_mode_or_goto_line);
+  init_op_list(&mappings_ch[MODE_NORMAL][0][':' - ' '], 1, enter_command_mode);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['/' - ' '], 1, enter_search_mode);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['o' - ' '], 1, enter_insert_in_new_line_below);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['d' - ' '], 1, remove_selected_text);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['c' - ' '], 2, remove_selected_text, enter_insert_mode);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['j' - ' '], 1, move_cursors_down);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['k' - ' '], 1, move_cursors_up);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['h' - ' '], 1, move_cursors_left);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['H' - ' '], 1, extend_selections_left);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['l' - ' '], 1, move_cursors_right);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['L' - ' '], 1, extend_selections_right);
+  init_op_list(&mappings_ch[MODE_NORMAL][0]['x' - ' '], 1, select_current_line);
+  init_op_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], 1, write_buffer_to_file); // Escape
+  init_op_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
+  init_op_list(&mappings_ch[MODE_GOTO][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
+  init_op_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['m' - ' '], 1, backslash_n); // Enter
+  init_op_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['m' - ' '], 1, process_menu_input); // Enter
+  init_op_list(&mappings_backspace[MODE_INSERT], 1, backspace_at_every_cursor);
+  init_op_list(&mappings_ch[MODE_GOTO][0]['e' - ' '], 1, goto_file_end);
+  init_op_list(&mappings_ch[MODE_GOTO][0]['g' - ' '], 1, goto_file_start);
+
+  push_command(szstr("w"), 1, write_buffer_to_file);
+  push_command(szstr("q"), 1, shutdown);
 
   if (argc > 2 || argc < 2) {
     printf("Invalid parameters\n");
