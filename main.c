@@ -10,14 +10,14 @@ typedef enum {
 } Mode;
 
 typedef struct {
-  char *content;
+  char *str;
   size_t len;
   size_t cap;
 } Line;
 
 typedef struct {
   size_t x;
-  size_t saved_x;
+  size_t sx;
   size_t y;
 } Cursor;
 
@@ -50,17 +50,17 @@ typedef void (*Operation)();
 typedef struct {
   Operation *ops;
   size_t num_ops;
-} OperationList;
+} OpList;
 
 typedef struct {
   char *name;
   size_t len_name;
-  OperationList op_list;
+  OpList op_list;
 } Command;
 
-Buffer *buffer;
-Buffer *file_buffer_global;
-Buffer *menu_buffer_global;
+Buffer *buf;
+Buffer *file_buf_global;
+Buffer *menu_buf_global;
 
 Command *cmd_list;
 size_t num_cmds = 0;
@@ -82,7 +82,7 @@ enum {
 
 struct tb_event tb_event;
 
-void v_init_op_list(OperationList *op_list, size_t num_ops, va_list ops) {
+void v_init_op_list(OpList *op_list, size_t num_ops, va_list ops) {
   if (op_arena_len > op_arena_cap) {
     op_arena_cap *= 2;
     Operation *new_arena = realloc(op_arena, sizeof(Operation) * op_arena_cap);
@@ -101,7 +101,7 @@ void v_init_op_list(OperationList *op_list, size_t num_ops, va_list ops) {
   op_list->num_ops = num_ops;
 }
 
-void init_op_list(OperationList *op_list, size_t num_ops, ...) {
+void init_op_list(OpList *op_list, size_t num_ops, ...) {
   va_list ops;
   va_start(ops, num_ops);
   v_init_op_list(op_list, num_ops, ops);
@@ -132,87 +132,147 @@ void push_command(char *name, size_t len_name, size_t num_ops, ...) {
 // TODO: pop_command
 
 void get_ordered_cursors(Selection *sel, Cursor **buf) {
-  if (sel->anchor.y < sel->cursor.y) { buf[0] = &sel->anchor; buf[1] = &sel->cursor; return; };
-  if (sel->anchor.y > sel->cursor.y) { buf[0] = &sel->cursor; buf[1] = &sel->anchor; return; };
-  if (sel->anchor.x <= sel->cursor.x) { buf[0] = &sel->anchor; buf[1] = &sel->cursor; return; };
+  if (sel->anchor.y < sel->cursor.y) {
+    buf[0] = &sel->anchor;
+    buf[1] = &sel->cursor;
+    return;
+  };
+  if (sel->anchor.y > sel->cursor.y) {
+    buf[0] = &sel->cursor;
+    buf[1] = &sel->anchor;
+    return;
+  };
+  if (sel->anchor.x <= sel->cursor.x) {
+    buf[0] = &sel->anchor;
+    buf[1] = &sel->cursor;
+    return;
+  };
   buf[0] = &sel->cursor, buf[1] = &sel->anchor;
 }
 
 void insert(Line *line, char *str, size_t str_len, size_t x) {
   if (line->len + str_len >= line->cap) {
     line->cap = line->len * 2 + str_len;
-    char *new_content = realloc(line->content, sizeof(char) * line->cap);
+    char *new_str = realloc(line->str, sizeof(char) * line->cap);
 
-    if (new_content == NULL) {
-      perror("Could not realloc line->content for inserting");
+    if (new_str == NULL) {
+      perror("Could not realloc line->str for inserting");
       exit(EXIT_FAILURE);
     }
 
-    line->content = new_content;
+    line->str = new_str;
   }
 
-  memmove(&line->content[x + str_len], &line->content[x], sizeof(char) * (line->len - x));
-  memcpy(&line->content[x], str, sizeof(char) * str_len);
+  memmove(
+    &line->str[x + str_len],
+    &line->str[x],
+    sizeof(char) * (line->len - x)
+  );
+  memcpy(&line->str[x], str, sizeof(char) * str_len);
   line->len += str_len;
 }
 
-void insert_line(Buffer *buffer, Line *line, size_t y) {
-  if (buffer->num_lines + 1 >= buffer->cap_lines) {
-    buffer->cap_lines = buffer->num_lines * 2 + 1;
-    Line *new_buffer_lines = realloc(buffer->lines, sizeof(Line) * buffer->cap_lines);
-    if (new_buffer_lines == NULL) {
-      perror("Could not realloc buffer->lines for inserting a line");
+void insert_line(Buffer *buf, Line *line, size_t y) {
+  if (buf->num_lines + 1 >= buf->cap_lines) {
+    buf->cap_lines = buf->num_lines * 2 + 1;
+    Line *new_buf_lines = realloc(
+      buf->lines, 
+      sizeof(Line) * buf->cap_lines
+    );
+    if (new_buf_lines == NULL) {
+      perror("Could not realloc buf->lines for inserting a line");
     }
 
-    buffer->lines = new_buffer_lines;
+    buf->lines = new_buf_lines;
   }
 
-  memmove(&buffer->lines[y + 1], &buffer->lines[y], sizeof(Line) * (buffer->num_lines - y));
-  buffer->lines[y].content = line->content;
-  buffer->lines[y].len = line->len;
-  buffer->lines[y].cap = line->len;
-  buffer->num_lines += 1;
+  memmove(
+    &buf->lines[y + 1],
+    &buf->lines[y],
+    sizeof(Line) * (buf->num_lines - y)
+  );
+  buf->lines[y].str = line->str;
+  buf->lines[y].len = line->len;
+  buf->lines[y].cap = line->len;
+  buf->num_lines += 1;
 }
 
-void remove_span(Buffer *buffer, size_t len, size_t x, size_t y) {
-  if (x - 1 + len == buffer->lines[y].len) {
-    if (y < buffer->num_lines - 1) {
-      insert(&buffer->lines[y], buffer->lines[y + 1].content, buffer->lines[y + 1].len, x);
-      free(buffer->lines[y + 1].content);
-      memmove(&buffer->lines[y + 1], &buffer->lines[y + 2], sizeof(Line) * (buffer->num_lines - y));
-      buffer->num_lines -= 1;
+void remove_span(Buffer *buf, size_t len, size_t x, size_t y) {
+  if (x - 1 + len == buf->lines[y].len) {
+    if (y < buf->num_lines - 1) {
+      insert(
+        &buf->lines[y],
+        buf->lines[y + 1].str,
+        buf->lines[y + 1].len,
+        x
+      );
+      free(buf->lines[y + 1].str);
+      memmove(
+        &buf->lines[y + 1],
+        &buf->lines[y + 2],
+        sizeof(Line) * (buf->num_lines - y)
+      );
+      buf->num_lines -= 1;
     }
     len -= 1;
   }
-  memmove(&buffer->lines[y].content[x], &buffer->lines[y].content[x + len], sizeof(char) * (buffer->lines[y].len - x - len));
-  buffer->lines[y].len -= len;
+  memmove(
+    &buf->lines[y].str[x],
+    &buf->lines[y].str[x + len],
+    sizeof(char) * (buf->lines[y].len - x - len));
+  buf->lines[y].len -= len;
 }
 
-void draw_buffer(Buffer *buffer, size_t draw_x, size_t draw_y, size_t height) {
-  size_t view_top = buffer->view_top;
+void draw_buf(Buffer *buf, size_t draw_x, size_t draw_y, size_t height) {
+  size_t view_top = buf->view_top;
 
-  for (int i = view_top; i < view_top + height && i < buffer->num_lines; i++) {
-    tb_print_len(draw_x, i - view_top + draw_y, TB_WHITE, 0, buffer->lines[i].content, buffer->lines[i].len);
+  for (int i = view_top; i < view_top + height && i < buf->num_lines; i++) {
+    tb_print_len(
+      draw_x, i - view_top + draw_y, 
+      TB_WHITE, 0, 
+      buf->lines[i].str,
+      buf->lines[i].len
+    );
   }
 
   uintattr_t color = 0;
-  if (buffer->mode == MODE_INSERT) color = TB_RED;
-  if (buffer->mode == MODE_NORMAL) color = TB_BLUE;
-  for (int i = 0; i < buffer->num_sels; i++) {
+  if (buf->mode == MODE_INSERT) color = TB_RED;
+  if (buf->mode == MODE_NORMAL) color = TB_BLUE;
+  for (int i = 0; i < buf->num_sels; i++) {
     Cursor *ends[2] = { 0 };
-    get_ordered_cursors(&buffer->sels[i], ends);
+    get_ordered_cursors(&buf->sels[i], ends);
     int x = ends[0]->x;
     for (int y = ends[0]->y; y < ends[1]->y; y++) {
-      for (; x <= buffer->lines[y].len; x++) {
-        if (x == buffer->lines[y].len) tb_set_cell(x + draw_x, y - view_top + draw_y, 0, 0, color);
-        else tb_set_cell(x + draw_x, y - view_top + draw_y, buffer->lines[y].content[x], 0, color);
+      for (; x <= buf->lines[y].len; x++) {
+        if (x == buf->lines[y].len) {
+          tb_set_cell(x + draw_x, y - view_top + draw_y, 0, 0, color);
+        }
+        else {
+          tb_set_cell(
+            x + draw_x, y - view_top + draw_y,
+            buf->lines[y].str[x],
+            0, color
+          );
+        }
       }
       x = 0;
     }
     // TODO: You could probably pull out the y from the first for loop and reuse the code with no alterations, but I'm tired
     for (; x <= ends[1]->x; x++) { 
-      if (x == buffer->lines[ends[1]->y].len) tb_set_cell(x + draw_x, ends[1]->y - view_top + draw_y, 0, 0, color);
-      else tb_set_cell(x + draw_x, ends[1]->y - view_top + draw_y, buffer->lines[ends[1]->y].content[x], 0, color);
+      if (x == buf->lines[ends[1]->y].len) {
+        tb_set_cell(
+          x + draw_x, ends[1]->y - view_top + draw_y, 
+          0, 0,
+          color
+        );
+      }
+      else {
+        tb_set_cell(
+          x + draw_x, ends[1]->y - view_top + draw_y, 
+          buf->lines[ends[1]->y].str[x],
+          0, color
+        );
+      }
     }
   }
 
@@ -221,12 +281,12 @@ void draw_buffer(Buffer *buffer, size_t draw_x, size_t draw_y, size_t height) {
 
 void set_cursor_x(Cursor *cursor, size_t new_cursor_x) {
   cursor->x = new_cursor_x;
-  cursor->saved_x = cursor->x;
+  cursor->sx = cursor->x;
 }
 
 void set_cursor_y(Cursor *cursor, size_t new_cursor_y, size_t new_line_len) {
   cursor->y = new_cursor_y;
-  cursor->x = cursor->saved_x > new_line_len ? new_line_len : cursor->saved_x;
+  cursor->x = cursor->sx > new_line_len ? new_line_len : cursor->sx;
 }
 
 void shutdown() {
@@ -236,55 +296,55 @@ void shutdown() {
 }
 
 void reduce_selections_to_cursor() {
-  for (int i = 0; i < buffer->num_sels; i++) {
-    buffer->sels[i].anchor.x = buffer->sels[i].cursor.x;
-    buffer->sels[i].anchor.saved_x = buffer->sels[i].cursor.saved_x;
-    buffer->sels[i].anchor.y = buffer->sels[i].cursor.y;
+  for (int i = 0; i < buf->num_sels; i++) {
+    buf->sels[i].anchor.x = buf->sels[i].cursor.x;
+    buf->sels[i].anchor.sx = buf->sels[i].cursor.sx;
+    buf->sels[i].anchor.y = buf->sels[i].cursor.y;
   }
 }
 
 void reduce_selections_to_primary() {
-  buffer->num_sels = 1;
-  buffer->sels[0].cursor.x = buffer->sels[buffer->primary_sel].cursor.x;
-  buffer->sels[0].cursor.saved_x = buffer->sels[buffer->primary_sel].cursor.saved_x;
-  buffer->sels[0].cursor.y = buffer->sels[buffer->primary_sel].cursor.y;
-  buffer->sels[0].anchor.x = buffer->sels[buffer->primary_sel].anchor.x;
-  buffer->sels[0].anchor.saved_x = buffer->sels[buffer->primary_sel].anchor.saved_x;
-  buffer->sels[0].anchor.y = buffer->sels[buffer->primary_sel].anchor.y;
+  buf->num_sels = 1;
+  buf->sels[0].cursor.x = buf->sels[buf->primary_sel].cursor.x;
+  buf->sels[0].cursor.sx = buf->sels[buf->primary_sel].cursor.sx;
+  buf->sels[0].cursor.y = buf->sels[buf->primary_sel].cursor.y;
+  buf->sels[0].anchor.x = buf->sels[buf->primary_sel].anchor.x;
+  buf->sels[0].anchor.sx = buf->sels[buf->primary_sel].anchor.sx;
+  buf->sels[0].anchor.y = buf->sels[buf->primary_sel].anchor.y;
 }
 
 void enter_insert_mode() {
-  for (int i = 0; i < buffer->num_sels; i++) {
+  for (int i = 0; i < buf->num_sels; i++) {
     Cursor *ends[2] = { 0 };
-    get_ordered_cursors(&buffer->sels[i], ends);
+    get_ordered_cursors(&buf->sels[i], ends);
 
-    size_t x = ends[1]->x, saved_x = ends[1]->x, y = ends[1]->y;
-    buffer->sels[i].cursor.x = ends[0]->x;
-    buffer->sels[i].cursor.saved_x = ends[0]->saved_x;
-    buffer->sels[i].cursor.y = ends[0]->y;
-    buffer->sels[i].anchor.x = x;
-    buffer->sels[i].anchor.saved_x = saved_x;
-    buffer->sels[i].anchor.y = y;
+    size_t x = ends[1]->x, sx = ends[1]->x, y = ends[1]->y;
+    buf->sels[i].cursor.x = ends[0]->x;
+    buf->sels[i].cursor.sx = ends[0]->sx;
+    buf->sels[i].cursor.y = ends[0]->y;
+    buf->sels[i].anchor.x = x;
+    buf->sels[i].anchor.sx = sx;
+    buf->sels[i].anchor.y = y;
   }
-  buffer->mode = MODE_INSERT;
+  buf->mode = MODE_INSERT;
 }
 
 void enter_normal_mode() {
-  buffer->mode = MODE_NORMAL;
+  buf->mode = MODE_NORMAL;
 }
 
 void enter_command_mode() {
   edit_mode = MENU_EDIT_MODE;
   menu_mode = COMMAND_MENU_MODE;
-  buffer = menu_buffer_global;
-  buffer->mode = MODE_INSERT;
+  buf = menu_buf_global;
+  buf->mode = MODE_INSERT;
 }
 
 void enter_search_mode() {
   edit_mode = MENU_EDIT_MODE;
   menu_mode = SEARCH_MENU_MODE;
-  buffer = menu_buffer_global;
-  buffer->mode = MODE_INSERT;
+  buf = menu_buf_global;
+  buf->mode = MODE_INSERT;
 }
 
 void process_menu_input() {
@@ -292,7 +352,8 @@ void process_menu_input() {
     case COMMAND_MENU_MODE: {
       int found = 0;
       for (int i = num_cmds - 1; i >= 0 && !found; i--) {
-        if (!strncmp(menu_buffer_global->lines[0].content, cmd_list[i].name, cmd_list[i].len_name)) {
+        if (!strncmp(menu_buf_global->lines[0].str, 
+                     cmd_list[i].name, cmd_list[i].len_name)) {
           found = 1;
           for (int j = 0; j < cmd_list[i].op_list.num_ops; j++) {
             cmd_list[i].op_list.ops[j]();
@@ -306,60 +367,60 @@ void process_menu_input() {
   }
 
   edit_mode = FILE_EDIT_MODE;
-  buffer = file_buffer_global;
+  buf = file_buf_global;
 }
 
 void enter_goto_mode_or_goto_line() {
-  if (buffer->num_arg > 0) {
-    if (buffer->num_arg + 1 >= buffer->num_lines) {
-      buffer->num_arg = buffer->num_lines;
+  if (buf->num_arg > 0) {
+    if (buf->num_arg + 1 >= buf->num_lines) {
+      buf->num_arg = buf->num_lines;
     }
     reduce_selections_to_primary();
-    set_cursor_x(&buffer->sels[0].cursor, 0);
-    set_cursor_x(&buffer->sels[0].anchor, 0);
-    buffer->sels[0].cursor.y = buffer->num_arg - 1;
-    buffer->sels[0].anchor.y = buffer->num_arg - 1;
+    set_cursor_x(&buf->sels[0].cursor, 0);
+    set_cursor_x(&buf->sels[0].anchor, 0);
+    buf->sels[0].cursor.y = buf->num_arg - 1;
+    buf->sels[0].anchor.y = buf->num_arg - 1;
 
-    if (buffer->num_arg > tb_height()) {
-      buffer->view_top = buffer->num_arg - tb_height();
+    if (buf->num_arg > tb_height()) {
+      buf->view_top = buf->num_arg - tb_height();
     }
     else {
-      buffer->view_top = 0;
+      buf->view_top = 0;
     }
   }
   else {
-    buffer->mode = MODE_GOTO;
+    buf->mode = MODE_GOTO;
   }
 }
 
 void goto_file_end() {
-  buffer->num_arg = buffer->num_lines;
+  buf->num_arg = buf->num_lines;
   enter_goto_mode_or_goto_line();
-  buffer->mode = MODE_NORMAL;
+  buf->mode = MODE_NORMAL;
 }
 
 void goto_file_start() {
-  buffer->num_arg = 1;
+  buf->num_arg = 1;
   enter_goto_mode_or_goto_line();
-  buffer->mode = MODE_NORMAL;
+  buf->mode = MODE_NORMAL;
 }
 
 void enter_insert_in_new_line_below() {
   switch (edit_mode) {
     case FILE_EDIT_MODE: {
       Line new_line = {
-        .content = malloc(sizeof(char) * 1),
+        .str = malloc(sizeof(char) * 1),
         .len = 0,
         .cap = 1,
       };
-      for (int i = 0; i < buffer->num_sels; i++) {
-        insert_line(buffer, &new_line, buffer->sels[i].cursor.y + 1);
-        buffer->sels[i].cursor.saved_x = 0;
-        buffer->sels[i].cursor.x = 0;
-        buffer->sels[i].cursor.y += 1;
+      for (int i = 0; i < buf->num_sels; i++) {
+        insert_line(buf, &new_line, buf->sels[i].cursor.y + 1);
+        buf->sels[i].cursor.sx = 0;
+        buf->sels[i].cursor.x = 0;
+        buf->sels[i].cursor.y += 1;
       }
       reduce_selections_to_cursor();
-      buffer->mode = MODE_INSERT;
+      buf->mode = MODE_INSERT;
     } break;
 
     case MENU_EDIT_MODE:
@@ -368,31 +429,31 @@ void enter_insert_in_new_line_below() {
 }
 
 void remove_selected_text() {
-  for (int i = 0; i < buffer->num_sels; i++) {
+  for (int i = 0; i < buf->num_sels; i++) {
     Cursor *ends[2] = { 0 };
-    get_ordered_cursors(&buffer->sels[i], ends);
+    get_ordered_cursors(&buf->sels[i], ends);
     int x = ends[0]->x;
     for (int y = ends[0]->y; y < ends[1]->y; y++) {
-      remove_span(buffer, buffer->lines[y].len - x + 1, x, y);
+      remove_span(buf, buf->lines[y].len - x + 1, x, y);
       x = 0;
     }
-    remove_span(buffer, ends[1]->x - x + 1, x, ends[1]->y);
+    remove_span(buf, ends[1]->x - x + 1, x, ends[1]->y);
     ends[1]->x = ends[0]->x;
-    ends[1]->saved_x = ends[0]->saved_x;
+    ends[1]->sx = ends[0]->sx;
     ends[1]->y = ends[0]->y;
   }
 }
 
 void move_cursors_down() {
-  for (int i = 0; i < buffer->num_sels; i++) {
-    Cursor *cursor = &buffer->sels[i].cursor;
-    if (cursor->y < buffer->num_lines - 1) {
-      set_cursor_y(cursor, cursor->y + 1, buffer->lines[cursor->y + 1].len);
-      buffer->sels[i].anchor.x = cursor->x;
-      buffer->sels[i].anchor.saved_x = cursor->saved_x;
-      buffer->sels[i].anchor.y = cursor->y;
-      if (cursor->y >= buffer->view_top + tb_height()) {
-        buffer->view_top += 1;
+  for (int i = 0; i < buf->num_sels; i++) {
+    Cursor *cursor = &buf->sels[i].cursor;
+    if (cursor->y < buf->num_lines - 1) {
+      set_cursor_y(cursor, cursor->y + 1, buf->lines[cursor->y + 1].len);
+      buf->sels[i].anchor.x = cursor->x;
+      buf->sels[i].anchor.sx = cursor->sx;
+      buf->sels[i].anchor.y = cursor->y;
+      if (cursor->y >= buf->view_top + tb_height()) {
+        buf->view_top += 1;
       }
     }
   }
@@ -400,15 +461,15 @@ void move_cursors_down() {
 }
 
 void move_cursors_up() {
-  for (int i = 0; i < buffer->num_sels; i++) {
-    Cursor *cursor = &buffer->sels[i].cursor;
+  for (int i = 0; i < buf->num_sels; i++) {
+    Cursor *cursor = &buf->sels[i].cursor;
     if (cursor->y > 0) {
-      set_cursor_y(cursor, cursor->y - 1, buffer->lines[cursor->y - 1].len);
-      buffer->sels[i].anchor.x = cursor->x;
-      buffer->sels[i].anchor.saved_x = cursor->saved_x;
-      buffer->sels[i].anchor.y = cursor->y;
-      if (cursor->y < buffer->view_top) {
-        buffer->view_top -= 1;
+      set_cursor_y(cursor, cursor->y - 1, buf->lines[cursor->y - 1].len);
+      buf->sels[i].anchor.x = cursor->x;
+      buf->sels[i].anchor.sx = cursor->sx;
+      buf->sels[i].anchor.y = cursor->y;
+      if (cursor->y < buf->view_top) {
+        buf->view_top -= 1;
       }
     }
   }
@@ -416,8 +477,8 @@ void move_cursors_up() {
 }
 
 void extend_selections_left() {
-  for (int i = 0; i < buffer->num_sels; i++) {
-    Cursor *cursor = &buffer->sels[i].cursor;
+  for (int i = 0; i < buf->num_sels; i++) {
+    Cursor *cursor = &buf->sels[i].cursor;
     if (cursor->x > 0) {
       set_cursor_x(cursor, cursor->x - 1);
     }
@@ -426,9 +487,9 @@ void extend_selections_left() {
 }
 
 void extend_selections_right() {
-  for (int i = 0; i < buffer->num_sels; i++) {
-    Cursor *cursor = &buffer->sels[i].cursor;
-    if (cursor->x < buffer->lines[cursor->y].len) {
+  for (int i = 0; i < buf->num_sels; i++) {
+    Cursor *cursor = &buf->sels[i].cursor;
+    if (cursor->x < buf->lines[cursor->y].len) {
       set_cursor_x(cursor, cursor->x + 1);
     }
   }
@@ -446,31 +507,31 @@ void move_cursors_right() {
 }
 
 void insert_at_every_cursor() {
-  for (int i = 0; i < buffer->num_sels; i++) {
-    Cursor *cursor = &buffer->sels[i].cursor;
-    insert(&buffer->lines[cursor->y], (char *)&tb_event.ch, 1, cursor->x);
+  for (int i = 0; i < buf->num_sels; i++) {
+    Cursor *cursor = &buf->sels[i].cursor;
+    insert(&buf->lines[cursor->y], (char *)&tb_event.ch, 1, cursor->x);
     set_cursor_x(cursor, cursor->x + 1);
-    set_cursor_x(&buffer->sels[i].anchor, buffer->sels[i].anchor.x + 1);
+    set_cursor_x(&buf->sels[i].anchor, buf->sels[i].anchor.x + 1);
   }
 }
 
 void backslash_n() {
   switch (edit_mode) {
     case FILE_EDIT_MODE: {
-      for (int i = 0; i < buffer->num_sels; i++) {
-        Cursor *cursor = &buffer->sels[i].cursor;
+      for (int i = 0; i < buf->num_sels; i++) {
+        Cursor *cursor = &buf->sels[i].cursor;
         Line line = {
-          .content = malloc(sizeof(char) * cursor->x),
+          .str = malloc(sizeof(char) * cursor->x),
           .len = cursor->x,
           .cap = cursor->x,
         };
-        memcpy(line.content, buffer->lines[cursor->y].content, cursor->x);
-        remove_span(buffer, cursor->x, 0, cursor->y);
-        insert_line(buffer, &line, cursor->y);
+        memcpy(line.str, buf->lines[cursor->y].str, cursor->x);
+        remove_span(buf, cursor->x, 0, cursor->y);
+        insert_line(buf, &line, cursor->y);
 
         set_cursor_x(cursor, 0);
-        set_cursor_x(&buffer->sels[i].anchor, 0);
-        buffer->sels[i].anchor.y += 1;
+        set_cursor_x(&buf->sels[i].anchor, 0);
+        buf->sels[i].anchor.y += 1;
         cursor->y += 1;
       }
     } break;
@@ -482,82 +543,82 @@ void backslash_n() {
 }
 
 void backspace_at_every_cursor() {
-  for (int i = 0; i < buffer->num_sels; i++) {
-    Cursor *cursor = &buffer->sels[i].cursor;
-    Cursor *anchor = &buffer->sels[i].anchor;
+  for (int i = 0; i < buf->num_sels; i++) {
+    Cursor *cursor = &buf->sels[i].cursor;
+    Cursor *anchor = &buf->sels[i].anchor;
     if (cursor->x > 0) {
-      remove_span(buffer, 1, cursor->x - 1, cursor->y);
+      remove_span(buf, 1, cursor->x - 1, cursor->y);
       cursor->x -= 1;
-      cursor->saved_x = cursor->x;
+      cursor->sx = cursor->x;
       anchor->x -= 1;
-      anchor->saved_x = anchor->x;
+      anchor->sx = anchor->x;
     }
     else if (cursor->y > 0) {
-      size_t saved_len = buffer->lines[buffer->sels[i].cursor.y - 1].len;
-      remove_span(buffer, 1, saved_len, buffer->sels[i].cursor.y - 1);
-      buffer->sels[i].cursor.y -= 1;
-      buffer->sels[i].anchor.y -= 1;
-      buffer->sels[i].cursor.x = saved_len;
-      buffer->sels[i].cursor.saved_x = saved_len;
-      buffer->sels[i].anchor.x = saved_len;
-      buffer->sels[i].anchor.saved_x = saved_len;
+      size_t saved_len = buf->lines[buf->sels[i].cursor.y - 1].len;
+      remove_span(buf, 1, saved_len, buf->sels[i].cursor.y - 1);
+      buf->sels[i].cursor.y -= 1;
+      buf->sels[i].anchor.y -= 1;
+      buf->sels[i].cursor.x = saved_len;
+      buf->sels[i].cursor.sx = saved_len;
+      buf->sels[i].anchor.x = saved_len;
+      buf->sels[i].anchor.sx = saved_len;
     }
   }
 }
 
 void select_current_line() {
-  for (int i = 0; i < buffer->num_sels; i++) {
+  for (int i = 0; i < buf->num_sels; i++) {
     Cursor *ends[2];
-    get_ordered_cursors(&buffer->sels[i], ends);
+    get_ordered_cursors(&buf->sels[i], ends);
     set_cursor_x(ends[0], 0);
-    set_cursor_x(ends[1], buffer->lines[ends[1]->y].len);
+    set_cursor_x(ends[1], buf->lines[ends[1]->y].len);
   }
 }
 
-void write_buffer_to_file() {
-  int fd = open(file_buffer_global->file_path, O_CREAT | O_WRONLY | O_TRUNC);
-  for (int i = 0; i < file_buffer_global->num_lines; i++) {
-    write(fd, file_buffer_global->lines[i].content, file_buffer_global->lines[i].len);
+void write_buf_to_file() {
+  int fd = open(file_buf_global->file_path, O_CREAT | O_WRONLY | O_TRUNC);
+  for (int i = 0; i < file_buf_global->num_lines; i++) {
+    write(fd, file_buf_global->lines[i].str, file_buf_global->lines[i].len);
     write(fd, "\n", 1);
   }
   close(fd);
 }
 
 // Does not support unicode
-OperationList mappings_ch[NUM_MODES][TB_MOD_ALT + TB_MOD_CTRL + 1][95];
-OperationList mappings_backspace[NUM_MODES];
+OpList maps_ch[NUM_MODES][TB_MOD_ALT + TB_MOD_CTRL + 1][95];
+OpList maps_backspace[NUM_MODES];
 
 int main(int argc, char **argv) {
   op_arena = malloc(sizeof(Operation) * op_arena_cap);
   cmd_list = malloc(sizeof(Command) * cap_cmds);
 
   for (int i = ' '; i <= '~'; i++) {
-    init_op_list(&mappings_ch[MODE_INSERT][0][i - ' '], 1, insert_at_every_cursor);
+    init_op_list(&maps_ch[MODE_INSERT][0][i - ' '], 1, insert_at_every_cursor);
   }
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['i' - ' '], 1, enter_insert_mode);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['g' - ' '], 1, enter_goto_mode_or_goto_line);
-  init_op_list(&mappings_ch[MODE_NORMAL][0][':' - ' '], 1, enter_command_mode);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['/' - ' '], 1, enter_search_mode);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['o' - ' '], 1, enter_insert_in_new_line_below);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['d' - ' '], 1, remove_selected_text);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['c' - ' '], 2, remove_selected_text, enter_insert_mode);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['j' - ' '], 1, move_cursors_down);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['k' - ' '], 1, move_cursors_up);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['h' - ' '], 1, move_cursors_left);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['H' - ' '], 1, extend_selections_left);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['l' - ' '], 1, move_cursors_right);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['L' - ' '], 1, extend_selections_right);
-  init_op_list(&mappings_ch[MODE_NORMAL][0]['x' - ' '], 1, select_current_line);
-  init_op_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], 1, write_buffer_to_file); // Escape
-  init_op_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
-  init_op_list(&mappings_ch[MODE_GOTO][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
-  init_op_list(&mappings_ch[MODE_INSERT][TB_MOD_CTRL]['m' - ' '], 1, backslash_n); // Enter
-  init_op_list(&mappings_ch[MODE_NORMAL][TB_MOD_CTRL]['m' - ' '], 1, process_menu_input); // Enter
-  init_op_list(&mappings_backspace[MODE_INSERT], 1, backspace_at_every_cursor);
-  init_op_list(&mappings_ch[MODE_GOTO][0]['e' - ' '], 1, goto_file_end);
-  init_op_list(&mappings_ch[MODE_GOTO][0]['g' - ' '], 1, goto_file_start);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['i' - ' '], 1, enter_insert_mode);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['g' - ' '], 1, enter_goto_mode_or_goto_line);
+  init_op_list(&maps_ch[MODE_NORMAL][0][':' - ' '], 1, enter_command_mode);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['/' - ' '], 1, enter_search_mode);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['o' - ' '], 1, enter_insert_in_new_line_below);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['d' - ' '], 1, remove_selected_text);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['c' - ' '], 2, remove_selected_text, enter_insert_mode);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['j' - ' '], 1, move_cursors_down);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['k' - ' '], 1, move_cursors_up);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['h' - ' '], 1, move_cursors_left);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['H' - ' '], 1, extend_selections_left);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['l' - ' '], 1, move_cursors_right);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['L' - ' '], 1, extend_selections_right);
+  init_op_list(&maps_ch[MODE_NORMAL][0]['x' - ' '], 1, select_current_line);
+  init_op_list(&maps_ch[MODE_NORMAL][TB_MOD_CTRL]['{' - ' '], 1, write_buf_to_file); // Escape
+  init_op_list(&maps_ch[MODE_INSERT][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
+  init_op_list(&maps_ch[MODE_GOTO][TB_MOD_CTRL]['{' - ' '], 1, enter_normal_mode); // Escape
+  init_op_list(&maps_ch[MODE_INSERT][TB_MOD_CTRL]['m' - ' '], 1, backslash_n); // Enter
+  init_op_list(&maps_ch[MODE_NORMAL][TB_MOD_CTRL]['m' - ' '], 1, process_menu_input); // Enter
+  init_op_list(&maps_backspace[MODE_INSERT], 1, backspace_at_every_cursor);
+  init_op_list(&maps_ch[MODE_GOTO][0]['e' - ' '], 1, goto_file_end);
+  init_op_list(&maps_ch[MODE_GOTO][0]['g' - ' '], 1, goto_file_start);
 
-  push_command(szstr("w"), 1, write_buffer_to_file);
+  push_command(szstr("w"), 1, write_buf_to_file);
   push_command(szstr("q"), 1, shutdown);
 
   if (argc > 2 || argc < 2) {
@@ -566,7 +627,7 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  Buffer file_buffer = {
+  Buffer file_buf = {
     .lines = malloc(sizeof(Line) * 1),
     .num_lines = 0,
     .cap_lines = 1,
@@ -577,7 +638,7 @@ int main(int argc, char **argv) {
     .mode = MODE_NORMAL,
     .file_path = argv[1],
   };
-  Buffer menu_buffer = {
+  Buffer menu_buf = {
     .lines = malloc(sizeof(Line) * 1),
     .num_lines = 1,
     .cap_lines = 1,
@@ -588,22 +649,22 @@ int main(int argc, char **argv) {
     .mode = MODE_NORMAL,
     .file_path = argv[1],
   };
-  menu_buffer.lines[0].content = malloc(sizeof(char) * 1);
-  menu_buffer.lines[0].len = 0;
-  menu_buffer.lines[0].cap = 1;
+  menu_buf.lines[0].str = malloc(sizeof(char) * 1);
+  menu_buf.lines[0].len = 0;
+  menu_buf.lines[0].cap = 1;
 
-  buffer = &file_buffer;
-  file_buffer_global = &file_buffer;
-  menu_buffer_global = &menu_buffer;
+  buf = &file_buf;
+  file_buf_global = &file_buf;
+  menu_buf_global = &menu_buf;
 
   {
-    FILE *file = fopen(buffer->file_path, "a+");
+    FILE *file = fopen(buf->file_path, "a+");
     if (file == NULL) {
       perror("Couldn't open file for reading");
       exit(1);
     }
     Line line = {
-     .content = malloc(sizeof(char) * 1),
+     .str = malloc(sizeof(char) * 1),
      .len = 0,
      .cap = 1,
     };
@@ -616,20 +677,20 @@ int main(int argc, char **argv) {
       messed_with = 1;
       if (c == '\r') continue;
       if (c == '\n' || c == '\0') {
-        insert_line(buffer, &line, current_y);
+        insert_line(buf, &line, current_y);
         current_y += 1;
         current_x = 0;
 
         line.len = 0;
         line.cap = 0;
-        line.content = malloc(sizeof(char) * 1);
+        line.str = malloc(sizeof(char) * 1);
         continue;
       }
       insert(&line, &c, 1, current_x);
       current_x += 1;
     }
     if (!messed_with) {
-      insert_line(buffer, &line, current_y);
+      insert_line(buf, &line, current_y);
     }
     fclose(file);
   }
@@ -642,56 +703,62 @@ int main(int argc, char **argv) {
 
   tb_set_input_mode(TB_INPUT_ALT | TB_INPUT_MOUSE);
 
-  draw_buffer(&file_buffer, 0, 0, tb_height() - 1);
+  draw_buf(&file_buf, 0, 0, tb_height() - 1);
 
   while (tb_poll_event(&tb_event) == TB_OK) {
     switch (tb_event.type) {
       case TB_EVENT_KEY: {
-        if (tb_event.ch >= '0' && tb_event.ch <= '9' && buffer->mode == MODE_NORMAL) {
-          buffer->num_arg *= 10;
-          buffer->num_arg += tb_event.ch - '0';
+        if (tb_event.ch >= '0' && tb_event.ch <= '9' &&
+            buf->mode == MODE_NORMAL) {
+          buf->num_arg *= 10;
+          buf->num_arg += tb_event.ch - '0';
         }
         else if (tb_event.ch >= ' ' && tb_event.ch <= '~') {
-          OperationList *op_list = &mappings_ch[buffer->mode][tb_event.mod][tb_event.ch - ' '];
+          OpList *op_list = &maps_ch[buf->mode]
+                                    [tb_event.mod]
+                                    [tb_event.ch - ' '];
           if (op_list->num_ops > 0) {
             for (int i = 0; i < op_list->num_ops; i++) {
               op_list->ops[i]();
             }
           }
-          buffer->num_arg = 0;
+          buf->num_arg = 0;
         }
-        else if (tb_event.key >= TB_KEY_CTRL_A && tb_event.key <= TB_KEY_SPACE) {
-          OperationList *op_list = &mappings_ch[buffer->mode][tb_event.mod][tb_event.key + 'A' - 1];
+        else if (tb_event.key >= TB_KEY_CTRL_A &&
+                 tb_event.key <= TB_KEY_SPACE) {
+          OpList *op_list = &maps_ch[buf->mode]
+                                    [tb_event.mod]
+                                    [tb_event.key + 'A' - 1];
           if (op_list->num_ops > 0) {
             for (int i = 0; i < op_list->num_ops; i++) {
               op_list->ops[i]();
             }
           }
-          buffer->num_arg = 0;
+          buf->num_arg = 0;
         }
         else if (tb_event.key == TB_KEY_BACKSPACE2) {
-          OperationList *op_list = &mappings_backspace[buffer->mode];
+          OpList *op_list = &maps_backspace[buf->mode];
           if (op_list->num_ops > 0) {
             for (int i = 0; i < op_list->num_ops; i++) {
               op_list->ops[i]();
             }
           }
-          buffer->num_arg = 0;
+          buf->num_arg = 0;
         }
       } break;
     }
 
     tb_clear();
-    draw_buffer(&file_buffer, 0, 0, tb_height() - 1);
+    draw_buf(&file_buf, 0, 0, tb_height() - 1);
     if (edit_mode == MENU_EDIT_MODE) {
       switch (menu_mode) {
         case COMMAND_MENU_MODE:
           tb_printf(0, tb_height() - 1, TB_WHITE, 0, ":");
-          draw_buffer(&menu_buffer, 1, tb_height() - 1, 1);
+          draw_buf(&menu_buf, 1, tb_height() - 1, 1);
           break;
         case SEARCH_MENU_MODE:
           tb_printf(0, tb_height() - 1, TB_WHITE, 0, "Search:");
-          draw_buffer(&menu_buffer, 7, tb_height() - 1, 1);
+          draw_buf(&menu_buf, 7, tb_height() - 1, 1);
           break;
       }
     }
