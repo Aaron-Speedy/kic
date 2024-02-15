@@ -142,6 +142,7 @@ void insert(Line *line, char *str, size_t str_len, size_t x) {
   if (line->len + str_len >= line->cap) {
     line->cap = line->len * 2 + str_len;
     char *new_content = realloc(line->content, sizeof(char) * line->cap);
+
     if (new_content == NULL) {
       perror("Could not realloc line->content for inserting");
       exit(EXIT_FAILURE);
