@@ -6,12 +6,8 @@ Note(2): This is currently going through a major private
 rewrite. The current codebase will likely not last.
 
 ## Overview
-KIC is a modal editor implementing various
-experimental features. Some examples of features we have
-or plan to have are:
-- Multi-file buffers
-- Display locks (for code folding, stick headers, etc.)
-- Contextual hooks and regex
+KIC is a playground to implement interesting features for code editors.
+More information soon!
 
 Documentation is coming soon. In the meantime, check out
 the code for a look into the current system.
